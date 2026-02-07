@@ -1,0 +1,68 @@
+version: "3.9"
+
+# ===========================================================================
+# FormPerfect – docker-compose
+# ===========================================================================
+# Usage:
+#   cp .env.example .env        # fill in your GEMINI_API_KEY
+#   docker compose up --build
+# ===========================================================================
+
+services:
+  # -----------------------------------------------------------------------
+  # Redis – message broker & result backend
+  # -----------------------------------------------------------------------
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # -----------------------------------------------------------------------
+  # FastAPI – HTTP API
+  # -----------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: >
+      uvicorn backend.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./backend:/app/backend  # hot-reload during dev
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # -----------------------------------------------------------------------
+  # Celery worker – video analysis pipeline
+  # -----------------------------------------------------------------------
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: >
+      celery -A backend.worker worker
+      --loglevel=info
+      --concurrency=2
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./backend:/app/backend
+    depends_on:
+      redis:
+        condition: service_healthy
