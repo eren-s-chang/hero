@@ -71,6 +71,18 @@
   text-shadow: 0 0 40px hsl(48 80% 55% / 0.3);
 }
 
+/* One Punch Man style title */
+.opm-title {
+  font-family: 'Bebas Neue', sans-serif;
+  color: hsl(0 70% 45%);
+  text-shadow: 
+    3px 3px 0 hsl(0 0% 10%),
+    6px 6px 0 hsl(0 0% 5%),
+    0 0 40px hsl(0 70% 50% / 0.3);
+  -webkit-text-stroke: 2px hsl(0 0% 15%);
+  letter-spacing: 0.02em;
+}
+
 /* Gradient overlay for hero */
 .hero-gradient {
   background: linear-gradient(
@@ -80,4 +92,9 @@
     hsl(0 0% 2% / 0.4) 50%,
     transparent 70%
   );
+}
+
+/* Perspective for 3D animations */
+.perspective-1000 {
+  perspective: 1000px;
 }
