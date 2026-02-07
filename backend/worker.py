@@ -145,6 +145,7 @@ def _interpret_with_gemini(landmark_text: str) -> dict[str, Any]:
         generation_config=genai.GenerationConfig(
             temperature=0.2,
             max_output_tokens=1024,
+            response_mime_type="application/json",
         ),
     )
 
@@ -154,9 +155,19 @@ def _interpret_with_gemini(landmark_text: str) -> dict[str, Any]:
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
+    # Best-effort extraction if extra text sneaks in
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = raw[start : end + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+
         logger.error("Gemini returned non-JSON: %s", raw)
         return {
             "exercise_detected": "unknown",
