@@ -24,6 +24,7 @@ from typing import Any
 import cv2
 import mediapipe as mp
 from google import genai
+from google.genai import types
 from celery import Celery
 
 # ---------------------------------------------------------------------------
@@ -185,12 +186,12 @@ def _interpret_with_gemini(landmark_text: str) -> dict[str, Any]:
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=prompt,
-            config={
-                "temperature": 0.2,
-                "max_output_tokens": 1024,
-                "response_mime_type": "application/json",
-                "response_json_schema": RESPONSE_JSON_SCHEMA,
-            },
+            config=types.GenerateContentConfig(
+                temperature=0.2,
+                max_output_tokens=1024,
+                response_mime_type="application/json",
+                response_schema=RESPONSE_JSON_SCHEMA,
+            ),
         )
     except Exception as exc:
         logger.warning(
@@ -206,6 +207,9 @@ def _interpret_with_gemini(landmark_text: str) -> dict[str, Any]:
                 "response_mime_type": "application/json",
             },
         )
+
+    if getattr(response, "parsed", None):
+        return response.parsed
 
     raw = response.text.strip()
 
