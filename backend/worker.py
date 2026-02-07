@@ -182,7 +182,7 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
 
         # Step A – extract pose landmarks
         logger.info("Step A: extracting landmarks from %s", tmp_path.name)
-        landmark_text = _extract_landmarks(str(tmp_path), every_n=5)
+        landmark_text = _extract_landmarks(str(tmp_path), every_n=1)
 
         # Step B – interpret with Gemini
         logger.info("Step B: sending %d chars to Gemini", len(landmark_text))
