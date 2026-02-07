@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bangers&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bangers&family=Inter:wght@400;500;600;700&family=Black+Ops+One&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -15,11 +15,11 @@
     --popover: 0 0% 8%;
     --popover-foreground: 0 0% 95%;
 
-    --primary: 48 80% 55%;
+    --primary: 48 90% 55%;
     --primary-foreground: 0 0% 5%;
 
-    --secondary: 350 60% 40%;
-    --secondary-foreground: 0 0% 95%;
+    --secondary: 0 75% 50%;
+    --secondary-foreground: 0 0% 98%;
 
     --muted: 0 0% 12%;
     --muted-foreground: 0 0% 55%;
