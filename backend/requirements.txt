@@ -2,6 +2,8 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 python-multipart==0.0.20
 celery[redis]==5.4.0
+redis>=5.0.0
 mediapipe==0.10.21
 google-generativeai==0.8.4
+google-genai==1.62.0
 opencv-python-headless==4.10.0.84

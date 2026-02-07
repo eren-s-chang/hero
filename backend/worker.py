@@ -3,11 +3,12 @@ FormPerfect – Celery worker.
 
 Pipeline
 --------
-1. Decode video with OpenCV, process every frame.
+1. Decode video with OpenCV, sample ~3 frames/sec.
 2. Run MediaPipe Pose to extract 33×3 landmarks per frame.
-3. Flatten landmarks into a compact text representation.
-4. Send to Gemini 1.5 Pro with a strict JSON system prompt.
-5. Return the parsed JSON to the result backend.
+3. Compute joint angles (knee, hip, elbow, shoulder, spine, ankle).
+4. Send compact angle time-series to Gemini for coaching analysis.
+5. Buffer raw landmarks in Redis for the frontend to overlay on the video.
+6. Return the parsed JSON to the result backend.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import math
 import os
 import re
 import tempfile
@@ -23,7 +25,9 @@ from typing import Any
 
 import cv2
 import mediapipe as mp
-import google.generativeai as genai
+import redis
+from google import genai
+from google.genai import types
 from celery import Celery
 
 # ---------------------------------------------------------------------------
@@ -54,6 +58,12 @@ celery_app.conf.update(
 )
 
 # ---------------------------------------------------------------------------
+# Redis client (for buffering landmarks for frontend overlay)
+# ---------------------------------------------------------------------------
+_redis = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+LANDMARKS_TTL = 3600  # same as result_expires
+
+# ---------------------------------------------------------------------------
 # Gemini config
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -61,41 +71,144 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
 SYSTEM_PROMPT = (
     "You are an elite fitness coach. "
-    "Analyze this time-series of 3D pose landmarks from a workout video. "
-    "Identify the exercise being performed. "
-    "Output **strictly valid JSON** with the following keys:\n"
+    "You will receive a time-series of computed joint angles (in degrees) "
+    "sampled from a workout video. Each line is one sampled frame with "
+    "the timestamp and joint angles.\n\n"
+    "Analyze the data and output **strictly valid JSON** with:\n"
     "  • exercise_detected  (string)\n"
-    "  • form_rating_1_to_10  (integer 1-10)\n"
-    "  • main_mistakes  (list of strings)\n"
-    "  • actionable_correction  (string)\n"
+    "  • rep_count  (integer – total reps detected, 0 if not a rep-based exercise)\n"
+    "  • form_rating_1_to_10  (integer 1-10 – global average across the whole set)\n"
+    "  • main_mistakes  (list of strings – most common form errors across all reps)\n"
+    "  • rep_analyses  (list of objects, one per rep, each with rep_number, "
+    "timestamp_start, timestamp_end, rating_1_to_10, and mistakes)\n"
+    "  • actionable_correction  (string – single most impactful cue to fix form)\n"
     "Do NOT wrap the JSON in markdown code-fences. Return raw JSON only."
 )
+
+RESPONSE_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "exercise_detected": {"type": "string"},
+        "rep_count": {"type": "integer"},
+        "form_rating_1_to_10": {"type": "integer"},
+        "main_mistakes": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "rep_analyses": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "rep_number": {"type": "integer"},
+                    "timestamp_start": {"type": "number"},
+                    "timestamp_end": {"type": "number"},
+                    "rating_1_to_10": {"type": "integer"},
+                    "mistakes": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+                "required": ["rep_number", "timestamp_start", "timestamp_end", "rating_1_to_10", "mistakes"],
+            },
+        },
+        "actionable_correction": {"type": "string"},
+    },
+    "required": [
+        "exercise_detected",
+        "rep_count",
+        "form_rating_1_to_10",
+        "main_mistakes",
+        "rep_analyses",
+        "actionable_correction",
+    ],
+}
 
 # ---------------------------------------------------------------------------
 # MediaPipe helpers
 # ---------------------------------------------------------------------------
-LANDMARK_NAMES = [lm.name for lm in mp.solutions.pose.PoseLandmark]
+PoseLandmark = mp.solutions.pose.PoseLandmark
+LANDMARK_NAMES = [lm.name for lm in PoseLandmark]
+
+TARGET_SAMPLES_PER_SEC = 3  # ~3 snapshots per second of video
+
+# Joint-angle definitions: (point_a, vertex, point_b)
+# The angle is measured at the *vertex* joint.
+ANGLE_DEFS: dict[str, tuple[PoseLandmark, PoseLandmark, PoseLandmark]] = {
+    "L_knee":      (PoseLandmark.LEFT_HIP,       PoseLandmark.LEFT_KNEE,      PoseLandmark.LEFT_ANKLE),
+    "R_knee":      (PoseLandmark.RIGHT_HIP,      PoseLandmark.RIGHT_KNEE,     PoseLandmark.RIGHT_ANKLE),
+    "L_hip":       (PoseLandmark.LEFT_SHOULDER,   PoseLandmark.LEFT_HIP,       PoseLandmark.LEFT_KNEE),
+    "R_hip":       (PoseLandmark.RIGHT_SHOULDER,  PoseLandmark.RIGHT_HIP,      PoseLandmark.RIGHT_KNEE),
+    "L_elbow":     (PoseLandmark.LEFT_SHOULDER,   PoseLandmark.LEFT_ELBOW,     PoseLandmark.LEFT_WRIST),
+    "R_elbow":     (PoseLandmark.RIGHT_SHOULDER,  PoseLandmark.RIGHT_ELBOW,    PoseLandmark.RIGHT_WRIST),
+    "L_shoulder":  (PoseLandmark.LEFT_ELBOW,      PoseLandmark.LEFT_SHOULDER,  PoseLandmark.LEFT_HIP),
+    "R_shoulder":  (PoseLandmark.RIGHT_ELBOW,     PoseLandmark.RIGHT_SHOULDER, PoseLandmark.RIGHT_HIP),
+    "L_ankle":     (PoseLandmark.LEFT_KNEE,       PoseLandmark.LEFT_ANKLE,     PoseLandmark.LEFT_FOOT_INDEX),
+    "R_ankle":     (PoseLandmark.RIGHT_KNEE,      PoseLandmark.RIGHT_ANKLE,    PoseLandmark.RIGHT_FOOT_INDEX),
+    "spine":       (PoseLandmark.LEFT_SHOULDER,    PoseLandmark.LEFT_HIP,       PoseLandmark.LEFT_KNEE),
+    # ↑ spine forward lean approximated via shoulder-hip-knee on the left side
+}
 
 
-def _extract_landmarks(video_path: str, every_n: int = 1) -> str:
-    """Read *video_path*, run MediaPipe Pose on every *every_n*-th frame,
-    and return a compact text representation of all sampled landmarks.
+def _angle_between(a, vertex, b) -> float:
+    """Return the angle in degrees at *vertex* formed by points *a* and *b*.
 
-    Format (one line per sampled frame):
-        frame=<N> | <landmark_name>:(x,y,z) <landmark_name>:(x,y,z) ...
+    Each point is a MediaPipe landmark with .x, .y, .z attributes.
+    """
+    ax, ay, az = a.x - vertex.x, a.y - vertex.y, a.z - vertex.z
+    bx, by, bz = b.x - vertex.x, b.y - vertex.y, b.z - vertex.z
+
+    dot = ax * bx + ay * by + az * bz
+    mag_a = math.sqrt(ax * ax + ay * ay + az * az) or 1e-9
+    mag_b = math.sqrt(bx * bx + by * by + bz * bz) or 1e-9
+
+    cos_angle = max(-1.0, min(1.0, dot / (mag_a * mag_b)))
+    return math.degrees(math.acos(cos_angle))
+
+
+def _compute_angles(landmarks) -> dict[str, float]:
+    """Compute all defined joint angles from a single frame's landmarks."""
+    lm = landmarks.landmark
+    angles: dict[str, float] = {}
+    for name, (a_idx, v_idx, b_idx) in ANGLE_DEFS.items():
+        angles[name] = round(_angle_between(lm[a_idx], lm[v_idx], lm[b_idx]), 1)
+    return angles
+
+
+def _process_video(
+    video_path: str, every_n: int | None = None
+) -> tuple[str, list[dict[str, Any]]]:
+    """Run MediaPipe on sampled frames.
+
+    Returns
+    -------
+    angle_text : str
+        Compact time-series of joint angles (one line per frame) for the LLM.
+    raw_frames : list[dict]
+        Per-frame raw landmark data for the frontend overlay.
+        Each dict: {"time_s": float, "landmarks": [{name, x, y, z}, ...]}
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {video_path}")
 
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    if every_n is None:
+        every_n = max(1, round(fps / TARGET_SAMPLES_PER_SEC))
+    logger.info(
+        "Sampling every %d-th frame (fps=%.1f, ~%d samples/sec)",
+        every_n, fps, round(fps / every_n),
+    )
+
     pose = mp.solutions.pose.Pose(
         static_image_mode=False,
-        model_complexity=0,  # 0=lite, 1=full, 2=heavy
+        model_complexity=0,
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
     )
 
-    lines: list[str] = []
+    angle_lines: list[str] = []
+    raw_frames: list[dict[str, Any]] = []
     frame_idx = 0
 
     try:
@@ -105,48 +218,86 @@ def _extract_landmarks(video_path: str, every_n: int = 1) -> str:
                 break
 
             if frame_idx % every_n == 0:
+                timestamp_s = round(frame_idx / fps, 3)
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 result = pose.process(rgb)
 
                 if result.pose_landmarks:
-                    parts: list[str] = []
-                    for lm, name in zip(result.pose_landmarks.landmark, LANDMARK_NAMES):
-                        parts.append(f"{name}:({lm.x:.4f},{lm.y:.4f},{lm.z:.4f})")
-                    lines.append(f"frame={frame_idx} | " + " ".join(parts))
+                    # ── Angles → LLM ──────────────────────────
+                    angles = _compute_angles(result.pose_landmarks)
+                    angle_parts = [f"{k}={v}" for k, v in angles.items()]
+                    angle_lines.append(
+                        f"t={timestamp_s:.3f} " + " ".join(angle_parts)
+                    )
+
+                    # ── Raw landmarks → Redis/frontend ────────
+                    lm_list = [
+                        {"name": name, "x": round(lm.x, 4), "y": round(lm.y, 4), "z": round(lm.z, 4)}
+                        for lm, name in zip(
+                            result.pose_landmarks.landmark, LANDMARK_NAMES
+                        )
+                    ]
+                    raw_frames.append({"time_s": timestamp_s, "landmarks": lm_list})
 
             frame_idx += 1
     finally:
         cap.release()
         pose.close()
 
-    if not lines:
+    if not angle_lines:
         raise RuntimeError("MediaPipe could not detect any pose in the video.")
 
-    logger.info("Extracted landmarks from %d / %d frames", len(lines), frame_idx)
-    return "\n".join(lines)
+    logger.info(
+        "Processed %d / %d frames → %d angle snapshots",
+        len(angle_lines), frame_idx, len(angle_lines),
+    )
+    return "\n".join(angle_lines), raw_frames
 
 
 # ---------------------------------------------------------------------------
 # Gemini helper
 # ---------------------------------------------------------------------------
-def _interpret_with_gemini(landmark_text: str) -> dict[str, Any]:
-    """Send the landmark data to Gemini and parse the JSON response."""
+def _interpret_with_gemini(angle_text: str) -> dict[str, Any]:
+    """Send the joint-angle time-series to Gemini and parse the JSON response."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set.")
 
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        model_name=GEMINI_MODEL,
-        system_instruction=SYSTEM_PROMPT,
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    prompt = (
+        f"{SYSTEM_PROMPT}\n\n"
+        "Here are the joint angles (degrees) extracted from a workout video:\n\n"
+        f"{angle_text}"
     )
 
-    response = model.generate_content(
-        f"Here are the 3D pose landmarks extracted from a workout video:\n\n{landmark_text}",
-        generation_config=genai.GenerationConfig(
-            temperature=0.2,
-            max_output_tokens=1024,
-        ),
-    )
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.2,
+                max_output_tokens=8192,
+                response_mime_type="application/json",
+                response_schema=RESPONSE_JSON_SCHEMA,
+            ),
+        )
+    except Exception as exc:
+        logger.warning(
+            "Structured output schema not supported by SDK; falling back to JSON mode only: %s",
+            exc,
+        )
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config={
+                "temperature": 0.2,
+                "max_output_tokens": 8192,
+                "response_mime_type": "application/json",
+            },
+        )
+
+    if getattr(response, "parsed", None):
+        return response.parsed
 
     raw = response.text.strip()
 
@@ -154,9 +305,19 @@ def _interpret_with_gemini(landmark_text: str) -> dict[str, Any]:
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
+    # Best-effort extraction if extra text sneaks in
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
+        start = raw.find("{")
+        end = raw.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = raw[start : end + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+
         logger.error("Gemini returned non-JSON: %s", raw)
         return {
             "exercise_detected": "unknown",
@@ -180,13 +341,26 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
         tmp.close()
         logger.info("Wrote %.1f MB to %s", tmp_path.stat().st_size / 1e6, tmp_path.name)
 
-        # Step A – extract pose landmarks
-        logger.info("Step A: extracting landmarks from %s", tmp_path.name)
-        landmark_text = _extract_landmarks(str(tmp_path), every_n=1)
+        # Step A – extract joint angles + raw landmarks
+        logger.info("Step A: processing video %s", tmp_path.name)
+        angle_text, raw_frames = _process_video(str(tmp_path))
 
-        # Step B – interpret with Gemini
-        logger.info("Step B: sending %d chars to Gemini", len(landmark_text))
-        analysis = _interpret_with_gemini(landmark_text)
+        # Step B – buffer raw landmarks in Redis for frontend overlay
+        task_id = self.request.id
+        if task_id:
+            redis_key = f"landmarks:{task_id}"
+            try:
+                _redis.set(redis_key, json.dumps(raw_frames), ex=LANDMARKS_TTL)
+                logger.info(
+                    "Buffered %d frames of landmarks in Redis (%s)",
+                    len(raw_frames), redis_key,
+                )
+            except Exception as exc:
+                logger.warning("Failed to buffer landmarks in Redis: %s", exc)
+
+        # Step C – interpret with Gemini
+        logger.info("Step C: sending %d chars of angle data to Gemini", len(angle_text))
+        analysis = _interpret_with_gemini(angle_text)
 
         return analysis
 
