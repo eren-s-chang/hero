@@ -181,16 +181,31 @@ def _interpret_with_gemini(landmark_text: str) -> dict[str, Any]:
         f"{landmark_text}"
     )
 
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=prompt,
-        config={
-            "temperature": 0.2,
-            "max_output_tokens": 1024,
-            "response_mime_type": "application/json",
-            "response_json_schema": RESPONSE_JSON_SCHEMA,
-        },
-    )
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config={
+                "temperature": 0.2,
+                "max_output_tokens": 1024,
+                "response_mime_type": "application/json",
+                "response_json_schema": RESPONSE_JSON_SCHEMA,
+            },
+        )
+    except Exception as exc:
+        logger.warning(
+            "Structured output schema not supported by SDK; falling back to JSON mode only: %s",
+            exc,
+        )
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config={
+                "temperature": 0.2,
+                "max_output_tokens": 1024,
+                "response_mime_type": "application/json",
+            },
+        )
 
     raw = response.text.strip()
 
