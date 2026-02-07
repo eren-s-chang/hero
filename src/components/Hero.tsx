@@ -68,10 +68,10 @@ const Hero = () => {
             transition={{ duration: 0.6, delay: 0.6, ease: [0.22, 1, 0.36, 1] }}
             className="mb-8"
           >
-            <h1 className="font-manga text-3xl sm:text-4xl md:text-5xl lg:text-6xl tracking-wide">
-              <span className="text-foreground">ONE </span>
-              <span className="text-primary">PERFECT </span>
-              <span className="text-foreground">FORM.</span>
+            <h1 className="font-heading text-3xl sm:text-4xl md:text-5xl lg:text-6xl tracking-wider uppercase">
+              <span className="text-foreground">Your </span>
+              <span className="text-primary">AI </span>
+              <span className="text-foreground">Physical Trainer.</span>
             </h1>
           </motion.div>
 
