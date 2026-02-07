@@ -8,14 +8,103 @@ const Hero = () => {
     <section className="relative min-h-screen flex flex-col overflow-hidden bg-background">
       {/* Full-bleed hero image */}
       <div className="absolute inset-0 z-0">
+        {/* Aura effect - BEHIND Saitama */}
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Intense aura glow pulses - behind Saitama's body */}
+          {[...Array(10)].map((_, i) => (
+            <motion.div
+              key={`aura-${i}`}
+              className="absolute rounded-full"
+              style={{
+                right: `${-5 + (i % 4) * 5}%`,
+                top: `${20 + (i % 3) * 10}%`,
+                width: `${150 + i * 40}px`,
+                height: `${200 + i * 50}px`,
+                background: `radial-gradient(ellipse at center, hsl(0 85% 50% / 0.35) 0%, hsl(48 90% 55% / 0.15) 40%, transparent 70%)`,
+                filter: 'blur(20px)',
+              }}
+              animate={{
+                opacity: [0.5, 1, 0.5],
+                scale: [1, 1.2, 1],
+              }}
+              transition={{
+                duration: 2 + (i % 2),
+                repeat: Infinity,
+                delay: i * 0.2,
+                ease: "easeInOut",
+              }}
+            />
+          ))}
+        </div>
+        
         <img
           src={heroImage}
           alt="Saitama in serious mode"
-          className="w-full h-full object-cover object-right"
+          className="w-full h-full object-cover object-right relative z-10"
         />
         {/* Gradient overlay to blend with background */}
-        <div className="absolute inset-0 hero-gradient" />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/60" />
+        <div className="absolute inset-0 hero-gradient z-20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/60 z-20" />
+        
+        {/* Steam effect - ON TOP of Saitama */}
+        <div className="absolute inset-0 pointer-events-none z-30">
+          {/* Rising steam particles - concentrated on the right */}
+          {[...Array(15)].map((_, i) => (
+            <motion.div
+              key={`steam-${i}`}
+              className="absolute rounded-full"
+              style={{
+                right: `${2 + (i % 5) * 8}%`,
+                bottom: `${10 + (i % 4) * 5}%`,
+                width: `${40 + (i % 3) * 20}px`,
+                height: `${60 + (i % 3) * 30}px`,
+                background: `radial-gradient(ellipse at center, hsl(0 0% 100% / 0.35) 0%, hsl(0 0% 95% / 0.15) 40%, transparent 70%)`,
+                filter: 'blur(6px)',
+              }}
+              animate={{
+                y: [0, -300 - (i % 3) * 100],
+                x: [0, (i % 2 === 0 ? 30 : -30)],
+                opacity: [0, 0.8, 0.6, 0],
+                scale: [0.8, 1.5, 2.5],
+              }}
+              transition={{
+                duration: 4 + (i % 3),
+                repeat: Infinity,
+                delay: i * 0.3,
+                ease: "easeOut",
+              }}
+            />
+          ))}
+          
+          {/* Wispy steam trails - rising from Saitama */}
+          {[...Array(10)].map((_, i) => (
+            <motion.div
+              key={`wisp-${i}`}
+              className="absolute"
+              style={{
+                right: `${3 + i * 4}%`,
+                bottom: '10%',
+                width: '6px',
+                height: '80px',
+                background: `linear-gradient(to top, transparent, hsl(0 0% 100% / 0.5), hsl(0 0% 95% / 0.25), transparent)`,
+                filter: 'blur(4px)',
+                borderRadius: '50%',
+              }}
+              animate={{
+                y: [0, -350],
+                x: [0, (i % 2 === 0 ? 40 : -40), 0],
+                opacity: [0, 0.7, 0.4, 0],
+                scaleY: [1, 2, 0.8],
+              }}
+              transition={{
+                duration: 5 + (i % 3),
+                repeat: Infinity,
+                delay: i * 0.4,
+                ease: "easeOut",
+              }}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Animated background particles */}
@@ -84,7 +173,7 @@ const Hero = () => {
             <motion.button 
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.98 }}
-              className="font-manga bg-secondary text-secondary-foreground px-8 py-4 text-xl sm:text-2xl uppercase flex items-center gap-3 hover:bg-secondary/90 transition-colors rounded-md"
+              className="font-heading bg-secondary text-secondary-foreground px-8 py-4 text-2xl sm:text-3xl uppercase flex items-center gap-3 hover:bg-secondary/90 transition-colors rounded-md tracking-wider"
             >
               TRY DEMO
               <motion.span
