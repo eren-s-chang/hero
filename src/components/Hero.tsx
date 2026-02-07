@@ -18,83 +18,85 @@ const Hero = () => {
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/60" />
         
         {/* Steam/Aura effect */}
-        <div className="absolute inset-0 pointer-events-none overflow-hidden">
-          {/* Rising steam particles */}
-          {[...Array(12)].map((_, i) => (
+        <div className="absolute inset-0 pointer-events-none z-10">
+          {/* Rising steam particles - more visible */}
+          {[...Array(15)].map((_, i) => (
             <motion.div
               key={`steam-${i}`}
-              className="absolute w-16 h-24 rounded-full"
+              className="absolute rounded-full"
               style={{
-                right: `${15 + (i % 4) * 15}%`,
-                bottom: `${10 + (i % 3) * 5}%`,
-                background: `radial-gradient(ellipse at center, hsl(48 80% 55% / ${0.08 + (i % 3) * 0.04}) 0%, transparent 70%)`,
-                filter: 'blur(8px)',
+                right: `${10 + (i % 5) * 12}%`,
+                bottom: `0%`,
+                width: `${40 + (i % 3) * 20}px`,
+                height: `${60 + (i % 3) * 30}px`,
+                background: `radial-gradient(ellipse at center, hsl(48 90% 60% / 0.25) 0%, hsl(48 80% 55% / 0.1) 40%, transparent 70%)`,
+                filter: 'blur(6px)',
               }}
               animate={{
-                y: [0, -150 - (i % 3) * 50],
-                x: [0, (i % 2 === 0 ? 20 : -20)],
-                opacity: [0, 0.6, 0],
-                scale: [0.5, 1.5, 2],
+                y: [0, -300 - (i % 3) * 100],
+                x: [0, (i % 2 === 0 ? 40 : -40)],
+                opacity: [0, 0.8, 0.6, 0],
+                scale: [0.8, 1.5, 2.5],
               }}
               transition={{
-                duration: 3 + (i % 3),
+                duration: 4 + (i % 3),
                 repeat: Infinity,
-                delay: i * 0.4,
+                delay: i * 0.3,
                 ease: "easeOut",
               }}
             />
           ))}
           
-          {/* Intense aura glow pulses */}
-          {[...Array(6)].map((_, i) => (
+          {/* Intense aura glow pulses - brighter */}
+          {[...Array(8)].map((_, i) => (
             <motion.div
               key={`aura-${i}`}
               className="absolute rounded-full"
               style={{
-                right: `${20 + (i % 3) * 10}%`,
-                top: `${30 + (i % 2) * 20}%`,
-                width: `${80 + i * 20}px`,
-                height: `${120 + i * 30}px`,
-                background: `radial-gradient(ellipse at center, hsl(0 75% 50% / ${0.06 + (i % 2) * 0.03}) 0%, transparent 60%)`,
-                filter: 'blur(12px)',
+                right: `${15 + (i % 4) * 10}%`,
+                top: `${20 + (i % 3) * 15}%`,
+                width: `${100 + i * 25}px`,
+                height: `${150 + i * 35}px`,
+                background: `radial-gradient(ellipse at center, hsl(0 80% 55% / 0.2) 0%, hsl(0 70% 45% / 0.08) 50%, transparent 70%)`,
+                filter: 'blur(15px)',
               }}
               animate={{
-                opacity: [0.3, 0.7, 0.3],
-                scale: [1, 1.2, 1],
+                opacity: [0.4, 0.9, 0.4],
+                scale: [1, 1.3, 1],
               }}
               transition={{
-                duration: 2 + (i % 2),
+                duration: 2.5 + (i % 2),
                 repeat: Infinity,
-                delay: i * 0.3,
+                delay: i * 0.25,
                 ease: "easeInOut",
               }}
             />
           ))}
           
-          {/* Wispy steam trails */}
-          {[...Array(8)].map((_, i) => (
+          {/* Wispy steam trails - more visible */}
+          {[...Array(10)].map((_, i) => (
             <motion.div
               key={`wisp-${i}`}
               className="absolute"
               style={{
-                right: `${10 + i * 8}%`,
-                bottom: '5%',
-                width: '4px',
-                height: '60px',
-                background: `linear-gradient(to top, transparent, hsl(48 80% 55% / 0.15), transparent)`,
-                filter: 'blur(3px)',
+                right: `${8 + i * 7}%`,
+                bottom: '0%',
+                width: '6px',
+                height: '80px',
+                background: `linear-gradient(to top, transparent, hsl(48 90% 60% / 0.4), hsl(48 80% 55% / 0.2), transparent)`,
+                filter: 'blur(4px)',
                 borderRadius: '50%',
               }}
               animate={{
-                y: [0, -200],
-                x: [0, (i % 2 === 0 ? 30 : -30), 0],
-                opacity: [0, 0.5, 0],
-                scaleY: [1, 1.5, 0.5],
+                y: [0, -350],
+                x: [0, (i % 2 === 0 ? 50 : -50), 0],
+                opacity: [0, 0.7, 0.4, 0],
+                scaleY: [1, 2, 0.8],
               }}
               transition={{
-                duration: 4 + (i % 2),
+                duration: 5 + (i % 3),
                 repeat: Infinity,
-                delay: i * 0.5,
+                delay: i * 0.4,
                 ease: "easeOut",
               }}
             />
