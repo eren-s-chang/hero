@@ -48,9 +48,9 @@ const Hero = () => {
             type: "spring",
             stiffness: 200
           }}
-          className="relative z-10 w-[90%] md:w-[70%] lg:w-[55%] aspect-[16/9] rounded-3xl overflow-hidden shadow-2xl mx-auto border-4 border-foreground"
+          className="relative z-10 w-[90%] md:w-[70%] lg:w-[55%] aspect-[16/9] rounded-2xl overflow-hidden mx-auto border-2 border-primary/50"
           style={{
-            boxShadow: "8px 8px 0px hsl(0 85% 55%), 16px 16px 0px hsl(0 0% 0% / 0.3)"
+            boxShadow: "0 0 40px hsl(50 35% 45% / 0.2), 8px 8px 0px hsl(345 50% 35%)"
           }}
         >
           <img
@@ -100,9 +100,9 @@ const Hero = () => {
             <motion.button 
               whileHover={{ scale: 1.05, rotate: -2 }}
               whileTap={{ scale: 0.95 }}
-              className="bg-secondary text-secondary-foreground px-8 py-4 rounded-xl font-heading text-xl tracking-wide uppercase flex items-center gap-3 border-4 border-foreground"
+              className="bg-secondary text-secondary-foreground px-8 py-4 rounded-xl font-heading text-xl tracking-wide uppercase flex items-center gap-3 border-2 border-secondary-foreground/20"
               style={{
-                boxShadow: "4px 4px 0px hsl(0 0% 0%)"
+                boxShadow: "0 0 20px hsl(345 50% 35% / 0.4), 4px 4px 0px hsl(0 0% 0%)"
               }}
             >
               Try Demo

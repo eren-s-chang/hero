@@ -6,17 +6,17 @@ const Footer = () => (
     initial={{ opacity: 0 }}
     whileInView={{ opacity: 1 }}
     viewport={{ once: true }}
-    className="border-t-4 border-foreground py-12 px-6 bg-primary"
+    className="border-t border-primary/30 py-12 px-6 bg-muted/50"
   >
     <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
       <motion.span 
         whileHover={{ scale: 1.1, rotate: -3 }}
-        className="font-heading text-3xl flex items-center gap-2 text-foreground"
+        className="font-heading text-3xl flex items-center gap-2 text-primary"
       >
-        <Zap className="w-6 h-6 fill-foreground" />
+        <Zap className="w-6 h-6 fill-primary" />
         FormGuard
       </motion.span>
-      <p className="text-foreground font-bold">
+      <p className="text-muted-foreground font-bold">
         © 2026 FormGuard. Train like a hero!
       </p>
     </div>

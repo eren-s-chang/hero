@@ -73,21 +73,21 @@ const Exercises = () => {
               key={ex.name}
               variants={itemVariants}
               whileHover={{ scale: 1.02, x: 10 }}
-              className="flex flex-col md:flex-row md:items-center justify-between bg-card rounded-2xl p-6 md:p-8 border-4 border-foreground cursor-pointer group"
+              className="flex flex-col md:flex-row md:items-center justify-between bg-card rounded-2xl p-6 md:p-8 border border-primary/30 cursor-pointer group"
               style={{
-                boxShadow: "6px 6px 0px hsl(45 100% 50%)"
+                boxShadow: "0 0 15px hsl(50 35% 45% / 0.1), 4px 4px 0px hsl(345 50% 35% / 0.5)"
               }}
             >
               <div className="flex items-center gap-6 mb-4 md:mb-0">
                 <motion.div
                   whileHover={{ rotate: 360 }}
                   transition={{ duration: 0.5 }}
-                  className="w-12 h-12 bg-secondary rounded-xl flex items-center justify-center border-2 border-foreground"
+                  className="w-12 h-12 bg-secondary/80 rounded-xl flex items-center justify-center border border-secondary-foreground/20"
                 >
                   <ex.icon className="w-6 h-6 text-secondary-foreground" />
                 </motion.div>
                 <h3 className="font-heading text-4xl md:text-5xl tracking-wide">{ex.name}</h3>
-                <span className="text-xs tracking-widest uppercase text-secondary-foreground bg-secondary px-4 py-2 rounded-full font-bold border-2 border-foreground">
+                <span className="text-xs tracking-widest uppercase text-secondary-foreground bg-secondary/80 px-4 py-2 rounded-full font-bold border border-secondary-foreground/20">
                   {ex.tag}
                 </span>
               </div>
