@@ -76,16 +76,27 @@
   text-shadow: 0 0 40px hsl(48 80% 55% / 0.3);
 }
 
-/* One Punch Man style title */
+/* One Punch Man style title - exact logo match */
 .opm-title {
   font-family: 'Bebas Neue', sans-serif;
-  color: hsl(0 70% 45%);
+  background: linear-gradient(180deg, hsl(0 75% 55%) 0%, hsl(0 70% 40%) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(4px 4px 0 hsl(0 0% 8%)) drop-shadow(6px 6px 0 hsl(0 0% 5%));
+  letter-spacing: 0.08em;
+  font-weight: 400;
+}
+
+/* Comic style text */
+.comic-text {
+  font-family: 'Bangers', cursive;
   text-shadow: 
     3px 3px 0 hsl(0 0% 10%),
-    6px 6px 0 hsl(0 0% 5%),
-    0 0 40px hsl(0 70% 50% / 0.3);
-  -webkit-text-stroke: 2px hsl(0 0% 15%);
-  letter-spacing: 0.02em;
+    -1px -1px 0 hsl(0 0% 10%),
+    1px -1px 0 hsl(0 0% 10%),
+    -1px 1px 0 hsl(0 0% 10%);
+  letter-spacing: 0.06em;
 }
 
 /* Gradient overlay for hero */

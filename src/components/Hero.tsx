@@ -64,7 +64,7 @@ const Hero = () => {
         transition={{ duration: 0.6, ease: "easeOut" }}
         className="relative z-30 flex items-center justify-between px-6 md:px-12 py-8"
       >
-        <span className="opm-title text-4xl md:text-5xl">
+        <span className="opm-title text-6xl md:text-7xl lg:text-8xl">
           HERO
         </span>
       </motion.nav>
@@ -83,8 +83,8 @@ const Hero = () => {
                 animate="visible"
                 className="overflow-hidden"
               >
-                <span className={`font-heading text-6xl sm:text-7xl md:text-8xl lg:text-9xl leading-[0.95] tracking-wider block ${
-                  i === 1 ? "text-primary text-glow" : "text-foreground"
+                <span className={`comic-text text-6xl sm:text-7xl md:text-8xl lg:text-9xl leading-[0.95] block ${
+                  i === 1 ? "text-primary" : "text-foreground"
                 }`}>
                   {word}
                 </span>
@@ -99,11 +99,11 @@ const Hero = () => {
             transition={{ duration: 0.6, delay: 1.2 }}
           >
             <motion.button 
-              whileHover={{ scale: 1.02, boxShadow: "0 0 30px hsl(48 80% 55% / 0.4)" }}
+              whileHover={{ scale: 1.05, boxShadow: "0 0 30px hsl(48 80% 55% / 0.5)" }}
               whileTap={{ scale: 0.98 }}
-              className="bg-primary text-primary-foreground px-10 py-5 font-heading text-2xl tracking-widest uppercase flex items-center gap-4 hover:bg-primary/90 transition-colors"
+              className="comic-text bg-primary text-primary-foreground px-10 py-5 text-3xl uppercase flex items-center gap-4 hover:bg-primary/90 transition-colors border-4 border-black"
             >
-              Try Demo
+              TRY DEMO
               <motion.span
                 animate={{ x: [0, 5, 0] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
