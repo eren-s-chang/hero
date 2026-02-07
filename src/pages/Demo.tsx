@@ -6,9 +6,36 @@ import { useNavigate } from "react-router-dom";
 const Demo = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [dragActive, setDragActive] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [duration, setDuration] = useState(0);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const [isTrimming, setIsTrimming] = useState(false);
+  const [trimmedFile, setTrimmedFile] = useState<File | null>(null);
+  const [trimmedUrl, setTrimmedUrl] = useState<string | null>(null);
+  const [activeThumb, setActiveThumb] = useState<"start" | "end" | null>(null);
+
+  const formatTime = (value: number) => {
+    const minutes = Math.floor(value / 60);
+    const seconds = Math.floor(value % 60)
+      .toString()
+      .padStart(2, "0");
+    const tenths = Math.floor((value % 1) * 10);
+    return `${minutes}:${seconds}.${tenths}`;
+  };
+
+  const getSupportedMimeType = () => {
+    const candidates = [
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm",
+      "video/mp4",
+    ];
+    return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "video/webm";
+  };
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -21,6 +48,12 @@ const Demo = () => {
     if (file.type.startsWith("video/")) {
       setSelectedFile(file);
       setPreviewUrl(URL.createObjectURL(file));
+      setTrimmedFile(null);
+      if (trimmedUrl) URL.revokeObjectURL(trimmedUrl);
+      setTrimmedUrl(null);
+      setDuration(0);
+      setTrimStart(0);
+      setTrimEnd(0);
     }
   };
 
@@ -39,6 +72,79 @@ const Demo = () => {
     setSelectedFile(null);
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
+    if (trimmedUrl) URL.revokeObjectURL(trimmedUrl);
+    setTrimmedUrl(null);
+    setTrimmedFile(null);
+    setDuration(0);
+    setTrimStart(0);
+    setTrimEnd(0);
+  };
+
+  const revertToOriginal = () => {
+    if (trimmedUrl) URL.revokeObjectURL(trimmedUrl);
+    setTrimmedUrl(null);
+    setTrimmedFile(null);
+    if (duration > 0) {
+      setTrimStart(0);
+      setTrimEnd(duration);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    const video = videoRef.current;
+    if (!video || !Number.isFinite(video.duration)) return;
+    const nextDuration = Math.max(0, video.duration);
+    setDuration(nextDuration);
+    setTrimStart(0);
+    setTrimEnd(nextDuration);
+  };
+
+  const handleTrim = async () => {
+    const video = videoRef.current;
+    const sourceFile = trimmedFile ?? selectedFile;
+    if (!video || !sourceFile) return;
+    if (trimEnd <= trimStart) return;
+    if (!(video as any).captureStream) return;
+
+    setIsTrimming(true);
+    const mimeType = getSupportedMimeType();
+    const recorder = new MediaRecorder((video as any).captureStream(), { mimeType });
+    const chunks: BlobPart[] = [];
+
+    const blobPromise = new Promise<Blob>((resolve, reject) => {
+      recorder.ondataavailable = (event) => {
+        if (event.data.size) chunks.push(event.data);
+      };
+      recorder.onerror = () => reject(new Error("Recording failed"));
+      recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+    });
+
+    const stopAt = trimEnd;
+    const handleTimeUpdate = () => {
+      if (video.currentTime >= stopAt) {
+        video.pause();
+        recorder.stop();
+        video.removeEventListener("timeupdate", handleTimeUpdate);
+      }
+    };
+
+    try {
+      recorder.start();
+      video.currentTime = trimStart;
+      await video.play();
+      video.addEventListener("timeupdate", handleTimeUpdate);
+      const blob = await blobPromise;
+      const baseName = sourceFile.name.replace(/\.[^/.]+$/, "");
+      const extension = mimeType.includes("mp4") ? "mp4" : "webm";
+      const nextFile = new File([blob], `${baseName}-trimmed.${extension}`, { type: blob.type });
+      setTrimmedFile(nextFile);
+      if (trimmedUrl) URL.revokeObjectURL(trimmedUrl);
+      setTrimmedUrl(URL.createObjectURL(nextFile));
+    } catch (error) {
+      recorder.stop();
+    } finally {
+      setIsTrimming(false);
+    }
   };
 
   return (
@@ -152,12 +258,102 @@ const Demo = () => {
                 <X className="w-5 h-5" />
               </button>
 
-              {previewUrl && (
+              {(trimmedUrl || previewUrl) && (
                 <video
-                  src={previewUrl}
+                  src={trimmedUrl ?? previewUrl ?? undefined}
                   controls
+                  ref={videoRef}
+                  onLoadedMetadata={handleLoadedMetadata}
                   className="w-full rounded-md mb-6 max-h-[400px] object-contain bg-background"
                 />
+              )}
+
+              {duration > 0 && (
+                <div className="mb-6 border border-border rounded-md p-4 bg-background/60">
+                  <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
+                    <span>Trim start: {formatTime(trimStart)}</span>
+                    <span>Trim end: {formatTime(trimEnd)}</span>
+                    <span>Length: {formatTime(Math.max(0, trimEnd - trimStart))}</span>
+                  </div>
+                  <div className="relative h-8" style={{ ['--thumb-size' as string]: '18px' }}>
+                    <div
+                      className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-border"
+                      style={{ left: "calc(var(--thumb-size) / -2)", right: "calc(var(--thumb-size) / -2)" }}
+                    />
+                    <div
+                      className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-primary"
+                      style={{
+                        left: `calc(${(trimStart / duration) * 100}% - (var(--thumb-size) / 2))`,
+                        right: `calc(${100 - (trimEnd / duration) * 100}% - (var(--thumb-size) / 2))`,
+                      }}
+                    />
+                    <input
+                      type="range"
+                      min={0}
+                      max={duration}
+                      step={0.1}
+                      value={trimStart}
+                      onChange={(e) => {
+                        const nextValue = Math.min(Number(e.target.value), trimEnd - 0.1);
+                        setTrimStart(Math.max(0, nextValue));
+                      }}
+                      onMouseDown={() => setActiveThumb("start")}
+                      onTouchStart={() => setActiveThumb("start")}
+                      className={`trim-range absolute inset-0 bg-transparent appearance-none cursor-pointer accent-primary ${
+                        activeThumb === "start" ? "z-20" : "z-10"
+                      }`}
+                      style={{
+                        left: "calc(var(--thumb-size) / -2)",
+                        width: "calc(100% + var(--thumb-size))",
+                      }}
+                    />
+                    <input
+                      type="range"
+                      min={0}
+                      max={duration}
+                      step={0.1}
+                      value={trimEnd}
+                      onChange={(e) => {
+                        const nextValue = Math.max(Number(e.target.value), trimStart + 0.1);
+                        setTrimEnd(Math.min(duration, nextValue));
+                      }}
+                      onMouseDown={() => setActiveThumb("end")}
+                      onTouchStart={() => setActiveThumb("end")}
+                      className={`trim-range absolute inset-0 bg-transparent appearance-none cursor-pointer accent-primary ${
+                        activeThumb === "end" ? "z-20" : "z-10"
+                      }`}
+                      style={{
+                        left: "calc(var(--thumb-size) / -2)",
+                        width: "calc(100% + var(--thumb-size))",
+                      }}
+                    />
+                  </div>
+                  <div className="mt-4 flex flex-col gap-3">
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <motion.button
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={handleTrim}
+                        disabled={isTrimming || trimEnd - trimStart <= 0.1}
+                        className="font-heading bg-primary text-primary-foreground py-3 text-lg uppercase tracking-wider rounded-md hover:bg-primary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {isTrimming ? "TRIMMING..." : "TRIM VIDEO"}
+                      </motion.button>
+                      <motion.button
+                        whileHover={{ scale: 1.03 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={revertToOriginal}
+                        disabled={!trimmedFile}
+                        className="font-heading bg-secondary text-secondary-foreground py-3 text-lg uppercase tracking-wider rounded-md hover:bg-secondary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        REVERT TO ORIGINAL
+                      </motion.button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Trimming re-records playback between start and end times in real time.
+                    </p>
+                  </div>
+                </div>
               )}
 
               <div className="flex items-center gap-4 mb-6">
@@ -177,7 +373,7 @@ const Demo = () => {
                 whileTap={{ scale: 0.98 }}
                 className="w-full font-heading bg-secondary text-secondary-foreground py-4 text-2xl uppercase tracking-wider rounded-md hover:bg-secondary/90 transition-colors"
               >
-                ANALYZE MY FORM
+                {trimmedFile ? "ANALYZE TRIMMED VIDEO" : "ANALYZE MY FORM"}
               </motion.button>
             </div>
           )}

@@ -115,3 +115,36 @@
 .perspective-1000 {
   perspective: 1000px;
 }
+
+.trim-range {
+  pointer-events: none;
+}
+
+.trim-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: all;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  border: 2px solid hsl(var(--background));
+}
+
+.trim-range::-moz-range-thumb {
+  pointer-events: all;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: hsl(var(--primary));
+  border: 2px solid hsl(var(--background));
+}
+
+.trim-range::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.trim-range::-moz-range-track {
+  background: transparent;
+  border: none;
+}
