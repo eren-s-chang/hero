@@ -1,22 +1,22 @@
 import { motion } from "framer-motion";
-import { Upload, ScanSearch, ShieldCheck, Zap } from "lucide-react";
+import { Upload, ScanSearch, ShieldCheck } from "lucide-react";
 
 const HowItWorks = () => {
   const steps = [
     {
       icon: Upload,
-      title: "Upload Video",
+      title: "UPLOAD",
       description: "Record or upload a video of your exercise — squat, deadlift, or push-up.",
     },
     {
       icon: ScanSearch,
-      title: "Analyze Form",
+      title: "ANALYZE",
       description: "Our AI analyzes every frame to detect alignment, depth, and movement patterns.",
     },
     {
       icon: ShieldCheck,
-      title: "Get Feedback",
-      description: "Receive clear, actionable corrections to reduce injury risk and boost performance.",
+      title: "OPTIMIZE",
+      description: "Receive precise corrections to eliminate injury risk and maximize performance.",
     },
   ];
 
@@ -25,46 +25,36 @@ const HowItWorks = () => {
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.2
+        staggerChildren: 0.15
       }
     }
   };
 
   const cardVariants = {
-    hidden: { y: 50, opacity: 0, rotate: -3 },
+    hidden: { y: 30, opacity: 0 },
     visible: { 
       y: 0, 
-      opacity: 1, 
-      rotate: 0,
+      opacity: 1,
       transition: {
-        type: "spring" as const,
-        stiffness: 200,
-        damping: 20
+        duration: 0.5,
+        ease: "easeOut" as const
       }
     }
   };
 
   return (
-    <section className="py-24 px-6 bg-muted/50 speed-lines relative overflow-hidden">
-      {/* Decorative elements */}
-      <motion.div 
-        animate={{ rotate: 360 }}
-        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-        className="absolute top-10 right-10 text-primary/20"
-      >
-        <Zap className="w-32 h-32" />
-      </motion.div>
-      
-      <div className="max-w-6xl mx-auto relative z-10">
+    <section className="py-24 px-6 md:px-12 bg-background relative">
+      <div className="max-w-6xl mx-auto">
         <motion.div
-          initial={{ x: -50, opacity: 0 }}
-          whileInView={{ x: 0, opacity: 1 }}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
+          className="mb-16"
         >
-          <p className="text-secondary font-bold tracking-widest uppercase text-sm mb-3">How It Works</p>
-          <h2 className="font-heading text-5xl md:text-6xl mb-16 comic-shadow">
-            Three Steps to<br />ULTIMATE POWER!
+          <p className="text-primary font-medium tracking-[0.3em] uppercase text-xs mb-4">Process</p>
+          <h2 className="font-heading text-5xl md:text-6xl tracking-wider">
+            HOW IT WORKS
           </h2>
         </motion.div>
         
@@ -73,29 +63,23 @@ const HowItWorks = () => {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true }}
-          className="grid md:grid-cols-3 gap-8"
+          className="grid md:grid-cols-3 gap-6"
         >
           {steps.map((step, i) => (
             <motion.div
               key={step.title}
               variants={cardVariants}
-              whileHover={{ scale: 1.05, rotate: 2 }}
-              className="bg-card rounded-2xl p-8 border border-primary/30 cursor-pointer"
-              style={{
-                boxShadow: "0 0 20px hsl(50 35% 45% / 0.1), 4px 4px 0px hsl(345 50% 35% / 0.5)"
-              }}
+              whileHover={{ y: -5 }}
+              className="bg-card p-8 border border-border hover:border-primary/40 transition-colors"
             >
-              <div className="flex items-center justify-between mb-6">
-                <motion.div 
-                  whileHover={{ rotate: 15, scale: 1.2 }}
-                  className="w-14 h-14 rounded-xl bg-secondary/80 flex items-center justify-center text-secondary-foreground border border-secondary-foreground/20"
-                >
-                  <step.icon className="w-7 h-7" />
-                </motion.div>
-                <span className="text-primary font-heading text-4xl">0{i + 1}</span>
+              <div className="flex items-center justify-between mb-8">
+                <div className="w-12 h-12 flex items-center justify-center text-primary">
+                  <step.icon className="w-6 h-6" strokeWidth={1.5} />
+                </div>
+                <span className="text-muted-foreground/30 font-heading text-5xl">0{i + 1}</span>
               </div>
-              <h3 className="font-heading text-2xl mb-3 tracking-wide">{step.title}</h3>
-              <p className="text-muted-foreground leading-relaxed font-semibold">{step.description}</p>
+              <h3 className="font-heading text-2xl tracking-wider mb-4">{step.title}</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed">{step.description}</p>
             </motion.div>
           ))}
         </motion.div>
