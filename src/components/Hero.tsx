@@ -8,17 +8,46 @@ const Hero = () => {
     <section className="relative min-h-screen flex flex-col overflow-hidden bg-background">
       {/* Full-bleed hero image */}
       <div className="absolute inset-0 z-0">
+        {/* Aura effect - BEHIND Saitama */}
+        <div className="absolute inset-0 pointer-events-none">
+          {/* Intense aura glow pulses - behind Saitama's body */}
+          {[...Array(10)].map((_, i) => (
+            <motion.div
+              key={`aura-${i}`}
+              className="absolute rounded-full"
+              style={{
+                right: `${-5 + (i % 4) * 5}%`,
+                top: `${20 + (i % 3) * 10}%`,
+                width: `${150 + i * 40}px`,
+                height: `${200 + i * 50}px`,
+                background: `radial-gradient(ellipse at center, hsl(0 85% 50% / 0.35) 0%, hsl(48 90% 55% / 0.15) 40%, transparent 70%)`,
+                filter: 'blur(20px)',
+              }}
+              animate={{
+                opacity: [0.5, 1, 0.5],
+                scale: [1, 1.2, 1],
+              }}
+              transition={{
+                duration: 2 + (i % 2),
+                repeat: Infinity,
+                delay: i * 0.2,
+                ease: "easeInOut",
+              }}
+            />
+          ))}
+        </div>
+        
         <img
           src={heroImage}
           alt="Saitama in serious mode"
-          className="w-full h-full object-cover object-right"
+          className="w-full h-full object-cover object-right relative z-10"
         />
         {/* Gradient overlay to blend with background */}
-        <div className="absolute inset-0 hero-gradient" />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/60" />
+        <div className="absolute inset-0 hero-gradient z-20" />
+        <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/60 z-20" />
         
-        {/* Steam/Aura effect - positioned around Saitama on the right */}
-        <div className="absolute inset-0 pointer-events-none z-10">
+        {/* Steam effect - ON TOP of Saitama */}
+        <div className="absolute inset-0 pointer-events-none z-30">
           {/* Rising steam particles - concentrated on the right */}
           {[...Array(15)].map((_, i) => (
             <motion.div
@@ -43,32 +72,6 @@ const Hero = () => {
                 repeat: Infinity,
                 delay: i * 0.3,
                 ease: "easeOut",
-              }}
-            />
-          ))}
-          
-          {/* Intense aura glow pulses - around Saitama's body */}
-          {[...Array(8)].map((_, i) => (
-            <motion.div
-              key={`aura-${i}`}
-              className="absolute rounded-full"
-              style={{
-                right: `${5 + (i % 4) * 6}%`,
-                top: `${25 + (i % 3) * 12}%`,
-                width: `${100 + i * 25}px`,
-                height: `${150 + i * 35}px`,
-                background: `radial-gradient(ellipse at center, hsl(0 80% 55% / 0.2) 0%, hsl(0 70% 45% / 0.08) 50%, transparent 70%)`,
-                filter: 'blur(15px)',
-              }}
-              animate={{
-                opacity: [0.4, 0.9, 0.4],
-                scale: [1, 1.3, 1],
-              }}
-              transition={{
-                duration: 2.5 + (i % 2),
-                repeat: Infinity,
-                delay: i * 0.25,
-                ease: "easeInOut",
               }}
             />
           ))}
