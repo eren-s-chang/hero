@@ -17,16 +17,16 @@ const Hero = () => {
         <div className="absolute inset-0 hero-gradient" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/60" />
         
-        {/* Steam/Aura effect */}
+        {/* Steam/Aura effect - positioned around Saitama on the right */}
         <div className="absolute inset-0 pointer-events-none z-10">
-          {/* Rising steam particles - more visible */}
+          {/* Rising steam particles - concentrated on the right */}
           {[...Array(15)].map((_, i) => (
             <motion.div
               key={`steam-${i}`}
               className="absolute rounded-full"
               style={{
-                right: `${10 + (i % 5) * 12}%`,
-                bottom: `0%`,
+                right: `${2 + (i % 5) * 8}%`,
+                bottom: `${10 + (i % 4) * 5}%`,
                 width: `${40 + (i % 3) * 20}px`,
                 height: `${60 + (i % 3) * 30}px`,
                 background: `radial-gradient(ellipse at center, hsl(48 90% 60% / 0.25) 0%, hsl(48 80% 55% / 0.1) 40%, transparent 70%)`,
@@ -34,7 +34,7 @@ const Hero = () => {
               }}
               animate={{
                 y: [0, -300 - (i % 3) * 100],
-                x: [0, (i % 2 === 0 ? 40 : -40)],
+                x: [0, (i % 2 === 0 ? 30 : -30)],
                 opacity: [0, 0.8, 0.6, 0],
                 scale: [0.8, 1.5, 2.5],
               }}
@@ -47,14 +47,14 @@ const Hero = () => {
             />
           ))}
           
-          {/* Intense aura glow pulses - brighter */}
+          {/* Intense aura glow pulses - around Saitama's body */}
           {[...Array(8)].map((_, i) => (
             <motion.div
               key={`aura-${i}`}
               className="absolute rounded-full"
               style={{
-                right: `${15 + (i % 4) * 10}%`,
-                top: `${20 + (i % 3) * 15}%`,
+                right: `${5 + (i % 4) * 6}%`,
+                top: `${25 + (i % 3) * 12}%`,
                 width: `${100 + i * 25}px`,
                 height: `${150 + i * 35}px`,
                 background: `radial-gradient(ellipse at center, hsl(0 80% 55% / 0.2) 0%, hsl(0 70% 45% / 0.08) 50%, transparent 70%)`,
@@ -73,14 +73,14 @@ const Hero = () => {
             />
           ))}
           
-          {/* Wispy steam trails - more visible */}
+          {/* Wispy steam trails - rising from Saitama */}
           {[...Array(10)].map((_, i) => (
             <motion.div
               key={`wisp-${i}`}
               className="absolute"
               style={{
-                right: `${8 + i * 7}%`,
-                bottom: '0%',
+                right: `${3 + i * 4}%`,
+                bottom: '10%',
                 width: '6px',
                 height: '80px',
                 background: `linear-gradient(to top, transparent, hsl(48 90% 60% / 0.4), hsl(48 80% 55% / 0.2), transparent)`,
@@ -89,7 +89,7 @@ const Hero = () => {
               }}
               animate={{
                 y: [0, -350],
-                x: [0, (i % 2 === 0 ? 50 : -50), 0],
+                x: [0, (i % 2 === 0 ? 40 : -40), 0],
                 opacity: [0, 0.7, 0.4, 0],
                 scaleY: [1, 2, 0.8],
               }}
