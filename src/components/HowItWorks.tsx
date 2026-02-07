@@ -45,7 +45,7 @@ const HowItWorks = () => {
   };
 
   return (
-    <section className="py-24 px-6 bg-primary/10 speed-lines relative overflow-hidden">
+    <section className="py-24 px-6 bg-muted/50 speed-lines relative overflow-hidden">
       {/* Decorative elements */}
       <motion.div 
         animate={{ rotate: 360 }}
@@ -80,15 +80,15 @@ const HowItWorks = () => {
               key={step.title}
               variants={cardVariants}
               whileHover={{ scale: 1.05, rotate: 2 }}
-              className="bg-card rounded-2xl p-8 border-4 border-foreground cursor-pointer"
+              className="bg-card rounded-2xl p-8 border border-primary/30 cursor-pointer"
               style={{
-                boxShadow: "6px 6px 0px hsl(0 0% 0%)"
+                boxShadow: "0 0 20px hsl(50 35% 45% / 0.1), 4px 4px 0px hsl(345 50% 35% / 0.5)"
               }}
             >
               <div className="flex items-center justify-between mb-6">
                 <motion.div 
                   whileHover={{ rotate: 15, scale: 1.2 }}
-                  className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center text-secondary-foreground border-2 border-foreground"
+                  className="w-14 h-14 rounded-xl bg-secondary/80 flex items-center justify-center text-secondary-foreground border border-secondary-foreground/20"
                 >
                   <step.icon className="w-7 h-7" />
                 </motion.div>
