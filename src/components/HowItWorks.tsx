@@ -53,7 +53,7 @@ const HowItWorks = () => {
           className="mb-16"
         >
           <p className="text-primary font-medium tracking-[0.3em] uppercase text-xs mb-4">Process</p>
-          <h2 className="font-heading text-5xl md:text-6xl tracking-wider">
+          <h2 className="font-manga text-5xl md:text-6xl tracking-wide">
             HOW IT WORKS
           </h2>
         </motion.div>
@@ -78,7 +78,7 @@ const HowItWorks = () => {
                 </div>
                 <span className="text-muted-foreground/30 font-heading text-5xl">0{i + 1}</span>
               </div>
-              <h3 className="font-heading text-2xl tracking-wider mb-4">{step.title}</h3>
+              <h3 className="font-manga text-2xl tracking-wide mb-4">{step.title}</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">{step.description}</p>
             </motion.div>
           ))}

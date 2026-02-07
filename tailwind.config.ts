@@ -15,6 +15,7 @@ export default {
     extend: {
       fontFamily: {
         heading: ["Bebas Neue", "sans-serif"],
+        manga: ["Bangers", "cursive"],
         body: ["Inter", "sans-serif"],
       },
       colors: {

@@ -69,27 +69,27 @@ const Hero = () => {
         </span>
       </motion.nav>
 
-      {/* Main hero content - centered */}
-      <div className="relative z-20 flex-1 flex items-center justify-center px-6 md:px-12">
-        <div className="text-center">
+      {/* Main hero content - left aligned */}
+      <div className="relative z-20 flex-1 flex items-center px-6 md:px-12">
+        <div className="max-w-2xl">
           {/* Main headline */}
-          <div className="mb-12 overflow-hidden">
-            <div className="flex flex-wrap justify-center gap-x-6 md:gap-x-10">
-              {words.map((word, i) => (
-                <motion.span
-                  key={i}
-                  custom={i}
-                  variants={wordVariants}
-                  initial="hidden"
-                  animate="visible"
-                  className={`font-heading text-6xl sm:text-7xl md:text-8xl lg:text-9xl leading-none tracking-wider ${
-                    i === 1 ? "text-primary text-glow" : "text-foreground"
-                  }`}
-                >
+          <div className="mb-10 overflow-hidden">
+            {words.map((word, i) => (
+              <motion.div
+                key={i}
+                custom={i}
+                variants={wordVariants}
+                initial="hidden"
+                animate="visible"
+                className="overflow-hidden"
+              >
+                <span className={`font-heading text-6xl sm:text-7xl md:text-8xl lg:text-9xl leading-[0.95] tracking-wider block ${
+                  i === 1 ? "text-primary text-glow" : "text-foreground"
+                }`}>
                   {word}
-                </motion.span>
-              ))}
-            </div>
+                </span>
+              </motion.div>
+            ))}
           </div>
 
           {/* CTA */}
@@ -101,7 +101,7 @@ const Hero = () => {
             <motion.button 
               whileHover={{ scale: 1.02, boxShadow: "0 0 30px hsl(48 80% 55% / 0.4)" }}
               whileTap={{ scale: 0.98 }}
-              className="bg-primary text-primary-foreground px-10 py-5 font-heading text-2xl tracking-widest uppercase flex items-center gap-4 mx-auto hover:bg-primary/90 transition-colors"
+              className="bg-primary text-primary-foreground px-10 py-5 font-heading text-2xl tracking-widest uppercase flex items-center gap-4 hover:bg-primary/90 transition-colors"
             >
               Try Demo
               <motion.span
