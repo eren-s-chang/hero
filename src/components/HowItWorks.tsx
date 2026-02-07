@@ -52,8 +52,8 @@ const HowItWorks = () => {
           transition={{ duration: 0.5 }}
           className="mb-16"
         >
-          <p className="text-primary font-medium tracking-[0.3em] uppercase text-xs mb-4">Process</p>
-          <h2 className="font-manga text-5xl md:text-6xl tracking-wide">
+          <p className="comic-text text-primary text-lg tracking-wider mb-4">PROCESS</p>
+          <h2 className="comic-text text-6xl md:text-7xl text-foreground">
             HOW IT WORKS
           </h2>
         </motion.div>
@@ -69,17 +69,17 @@ const HowItWorks = () => {
             <motion.div
               key={step.title}
               variants={cardVariants}
-              whileHover={{ y: -5 }}
-              className="bg-card p-8 border border-border hover:border-primary/40 transition-colors"
+              whileHover={{ y: -8, scale: 1.02 }}
+              className="bg-card p-8 border-4 border-black hover:border-primary transition-colors relative"
             >
               <div className="flex items-center justify-between mb-8">
-                <div className="w-12 h-12 flex items-center justify-center text-primary">
-                  <step.icon className="w-6 h-6" strokeWidth={1.5} />
+                <div className="w-14 h-14 flex items-center justify-center text-primary bg-primary/10 border-2 border-primary">
+                  <step.icon className="w-7 h-7" strokeWidth={2} />
                 </div>
-                <span className="text-muted-foreground/30 font-heading text-5xl">0{i + 1}</span>
+                <span className="comic-text text-muted-foreground/40 text-6xl">0{i + 1}</span>
               </div>
-              <h3 className="font-manga text-2xl tracking-wide mb-4">{step.title}</h3>
-              <p className="text-muted-foreground text-sm leading-relaxed">{step.description}</p>
+              <h3 className="comic-text text-3xl text-foreground mb-4">{step.title}</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed font-body">{step.description}</p>
             </motion.div>
           ))}
         </motion.div>
