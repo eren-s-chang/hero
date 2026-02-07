@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bangers&family=Inter:wght@400;500;600;700&family=Black+Ops+One&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bangers&family=Caveat:wght@400;500;600;700&family=Patrick+Hand&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -47,7 +47,8 @@
 
     --font-heading: 'Bebas Neue', sans-serif;
     --font-manga: 'Bangers', cursive;
-    --font-body: 'Inter', sans-serif;
+    --font-body: 'Patrick Hand', cursive;
+    --font-handwritten: 'Caveat', cursive;
   }
 }
 

@@ -16,7 +16,8 @@ export default {
       fontFamily: {
         heading: ["Bebas Neue", "sans-serif"],
         manga: ["Bangers", "cursive"],
-        body: ["Inter", "sans-serif"],
+        body: ["Patrick Hand", "cursive"],
+        handwritten: ["Caveat", "cursive"],
       },
       colors: {
         border: "hsl(var(--border))",

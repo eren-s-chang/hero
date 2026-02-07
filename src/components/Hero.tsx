@@ -84,7 +84,7 @@ const Hero = () => {
             <motion.button 
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.98 }}
-              className="font-manga bg-secondary text-secondary-foreground px-8 py-4 text-xl sm:text-2xl uppercase flex items-center gap-3 hover:bg-secondary/90 transition-colors rounded-md"
+              className="font-heading bg-secondary text-secondary-foreground px-8 py-4 text-2xl sm:text-3xl uppercase flex items-center gap-3 hover:bg-secondary/90 transition-colors rounded-md tracking-wider"
             >
               TRY DEMO
               <motion.span
