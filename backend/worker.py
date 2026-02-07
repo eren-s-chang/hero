@@ -91,7 +91,6 @@ RESPONSE_JSON_SCHEMA = {
                     "mistake": {"type": "string"},
                 },
                 "required": ["timestamp_seconds", "mistake"],
-                "additionalProperties": False,
             },
         },
         "actionable_correction": {"type": "string"},
@@ -103,7 +102,6 @@ RESPONSE_JSON_SCHEMA = {
         "mistakes_with_timestamps",
         "actionable_correction",
     ],
-    "additionalProperties": False,
 }
 
 # ---------------------------------------------------------------------------
