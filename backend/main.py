@@ -11,12 +11,14 @@ GET  /health         – Liveness probe.
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import os
 import subprocess
 import tempfile
 from pathlib import Path
 
+import redis
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -29,6 +31,8 @@ from celery.result import AsyncResult
 # ---------------------------------------------------------------------------
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "50"))
+REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+_redis = redis.Redis.from_url(REDIS_URL, decode_responses=True)
 
 # ---------------------------------------------------------------------------
 # App
@@ -183,3 +187,23 @@ async def result(task_id: str):
 
     # Catch-all for custom states
     return {"status": task_result.state}
+
+
+@app.get("/landmarks/{task_id}")
+async def landmarks(task_id: str):
+    """Return the raw MediaPipe landmarks buffered during analysis.
+
+    The frontend can use these to draw a skeleton overlay on the video.
+    Each frame has: {time_s: float, landmarks: [{name, x, y, z}, ...]}.
+    Coordinates are normalised 0-1 relative to the video frame.
+    """
+    redis_key = f"landmarks:{task_id}"
+    data = _redis.get(redis_key)
+
+    if data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Landmarks not found. They may have expired or the task hasn't completed yet.",
+        )
+
+    return {"task_id": task_id, "frames": json.loads(data)}
