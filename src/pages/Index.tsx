@@ -1,6 +1,5 @@
 import Hero from "@/components/Hero";
 import HowItWorks from "@/components/HowItWorks";
-import Exercises from "@/components/Exercises";
 import Footer from "@/components/Footer";
 
 const Index = () => {
@@ -8,7 +7,6 @@ const Index = () => {
     <main className="bg-background text-foreground min-h-screen">
       <Hero />
       <HowItWorks />
-      <Exercises />
       <Footer />
     </main>
   );
