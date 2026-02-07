@@ -8,11 +8,11 @@ const Footer = () => (
     className="border-t border-border py-12 px-6 md:px-12 bg-background"
   >
     <div className="max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-      <span className="font-heading text-2xl tracking-widest text-foreground">
-        FORMGUARD
+      <span className="opm-title text-4xl md:text-5xl">
+        HERO
       </span>
       <p className="text-muted-foreground text-sm">
-        © 2026 FormGuard. Precision movement analysis.
+        © 2026 HERO. Precision movement analysis.
       </p>
     </div>
   </motion.footer>
