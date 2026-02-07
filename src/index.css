@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,47 +6,47 @@
 
 @layer base {
   :root {
-    --background: 0 0% 5%;
-    --foreground: 45 20% 90%;
+    --background: 0 0% 2%;
+    --foreground: 0 0% 95%;
 
-    --card: 0 0% 10%;
-    --card-foreground: 45 20% 90%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 95%;
 
-    --popover: 0 0% 10%;
-    --popover-foreground: 45 20% 90%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 95%;
 
-    --primary: 50 35% 45%;
+    --primary: 48 80% 55%;
     --primary-foreground: 0 0% 5%;
 
-    --secondary: 345 50% 35%;
-    --secondary-foreground: 45 20% 95%;
+    --secondary: 350 60% 40%;
+    --secondary-foreground: 0 0% 95%;
 
-    --muted: 0 0% 15%;
-    --muted-foreground: 45 10% 55%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 55%;
 
-    --accent: 50 35% 45%;
+    --accent: 48 80% 55%;
     --accent-foreground: 0 0% 5%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 0 0% 20%;
-    --input: 0 0% 20%;
-    --ring: 50 35% 45%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 48 80% 55%;
 
-    --radius: 1rem;
+    --radius: 0.5rem;
 
-    --sidebar-background: 0 0% 8%;
-    --sidebar-foreground: 45 20% 90%;
-    --sidebar-primary: 50 35% 45%;
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 48 80% 55%;
     --sidebar-primary-foreground: 0 0% 5%;
-    --sidebar-accent: 345 50% 35%;
-    --sidebar-accent-foreground: 45 20% 95%;
-    --sidebar-border: 0 0% 20%;
-    --sidebar-ring: 50 35% 45%;
+    --sidebar-accent: 350 60% 40%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 48 80% 55%;
 
-    --font-heading: 'Bangers', cursive;
-    --font-body: 'Nunito', sans-serif;
+    --font-heading: 'Bebas Neue', sans-serif;
+    --font-body: 'Inter', sans-serif;
   }
 }
 
@@ -62,32 +62,22 @@
 
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
   }
 }
 
-/* Comic-style text shadow - muted olive yellow with maroon */
-.comic-shadow {
-  text-shadow: 2px 2px 0px hsl(345 50% 35%), 
-               4px 4px 0px hsl(0 0% 0% / 0.5);
+/* Subtle glow effect */
+.text-glow {
+  text-shadow: 0 0 40px hsl(48 80% 55% / 0.3);
 }
 
-/* Subtle speed lines for dark theme */
-.speed-lines {
-  background-image: repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent 3px,
-    hsl(50 35% 45% / 0.03) 3px,
-    hsl(50 35% 45% / 0.03) 6px
-  );
-}
-
-/* Action burst - subtle olive glow */
-.action-burst {
-  background: radial-gradient(
-    ellipse at center,
-    hsl(50 35% 45% / 0.1) 0%,
+/* Gradient overlay for hero */
+.hero-gradient {
+  background: linear-gradient(
+    to right,
+    hsl(0 0% 2%) 0%,
+    hsl(0 0% 2% / 0.9) 25%,
+    hsl(0 0% 2% / 0.4) 50%,
     transparent 70%
   );
 }

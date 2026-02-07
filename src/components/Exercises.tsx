@@ -1,24 +1,21 @@
 import { motion } from "framer-motion";
-import { ArrowRight, Flame, Target, Dumbbell } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 const exercises = [
   {
-    name: "Squat",
+    name: "SQUAT",
     description: "Knee tracking, depth, back angle, and weight distribution analysis.",
     tag: "Lower Body",
-    icon: Flame,
   },
   {
-    name: "Deadlift",
+    name: "DEADLIFT",
     description: "Spinal alignment, hip hinge mechanics, and lockout form detection.",
     tag: "Posterior Chain",
-    icon: Target,
   },
   {
-    name: "Push-Up",
+    name: "PUSH-UP",
     description: "Elbow flare, core sag, and range of motion evaluation.",
     tag: "Upper Body",
-    icon: Dumbbell,
   },
 ];
 
@@ -28,36 +25,36 @@ const Exercises = () => {
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.15
+        staggerChildren: 0.1
       }
     }
   };
 
   const itemVariants = {
-    hidden: { x: -100, opacity: 0 },
+    hidden: { x: -20, opacity: 0 },
     visible: { 
       x: 0, 
       opacity: 1,
       transition: {
-        type: "spring" as const,
-        stiffness: 100,
-        damping: 15
+        duration: 0.4,
+        ease: "easeOut" as const
       }
     }
   };
 
   return (
-    <section className="py-24 px-6 bg-background relative overflow-hidden">
+    <section className="py-24 px-6 md:px-12 bg-muted/30 relative">
       <div className="max-w-6xl mx-auto">
         <motion.div
-          initial={{ y: 30, opacity: 0 }}
-          whileInView={{ y: 0, opacity: 1 }}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
+          className="mb-16"
         >
-          <p className="text-secondary font-bold tracking-widest uppercase text-sm mb-3">Supported Exercises</p>
-          <h2 className="font-heading text-5xl md:text-6xl mb-16 comic-shadow">
-            Master These<br />HERO MOVES!
+          <p className="text-primary font-medium tracking-[0.3em] uppercase text-xs mb-4">Exercises</p>
+          <h2 className="font-heading text-5xl md:text-6xl tracking-wider">
+            SUPPORTED MOVEMENTS
           </h2>
         </motion.div>
         
@@ -66,39 +63,24 @@ const Exercises = () => {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true }}
-          className="space-y-6"
+          className="space-y-4"
         >
           {exercises.map((ex) => (
             <motion.div
               key={ex.name}
               variants={itemVariants}
-              whileHover={{ scale: 1.02, x: 10 }}
-              className="flex flex-col md:flex-row md:items-center justify-between bg-card rounded-2xl p-6 md:p-8 border border-primary/30 cursor-pointer group"
-              style={{
-                boxShadow: "0 0 15px hsl(50 35% 45% / 0.1), 4px 4px 0px hsl(345 50% 35% / 0.5)"
-              }}
+              whileHover={{ x: 8 }}
+              className="flex flex-col md:flex-row md:items-center justify-between bg-card p-6 md:p-8 border border-border hover:border-primary/40 transition-all cursor-pointer group"
             >
               <div className="flex items-center gap-6 mb-4 md:mb-0">
-                <motion.div
-                  whileHover={{ rotate: 360 }}
-                  transition={{ duration: 0.5 }}
-                  className="w-12 h-12 bg-secondary/80 rounded-xl flex items-center justify-center border border-secondary-foreground/20"
-                >
-                  <ex.icon className="w-6 h-6 text-secondary-foreground" />
-                </motion.div>
-                <h3 className="font-heading text-4xl md:text-5xl tracking-wide">{ex.name}</h3>
-                <span className="text-xs tracking-widest uppercase text-secondary-foreground bg-secondary/80 px-4 py-2 rounded-full font-bold border border-secondary-foreground/20">
+                <h3 className="font-heading text-3xl md:text-4xl tracking-wider">{ex.name}</h3>
+                <span className="text-[10px] tracking-[0.2em] uppercase text-primary bg-primary/10 px-3 py-1.5 font-medium">
                   {ex.tag}
                 </span>
               </div>
               <div className="flex items-center gap-6">
-                <p className="text-muted-foreground font-semibold max-w-xs">{ex.description}</p>
-                <motion.div
-                  whileHover={{ x: 10 }}
-                  className="shrink-0"
-                >
-                  <ArrowRight className="w-6 h-6 text-foreground group-hover:text-secondary transition-colors" />
-                </motion.div>
+                <p className="text-muted-foreground text-sm max-w-xs">{ex.description}</p>
+                <ArrowRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
               </div>
             </motion.div>
           ))}

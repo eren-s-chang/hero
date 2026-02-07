@@ -14,8 +14,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        heading: ["Bangers", "cursive"],
-        body: ["Nunito", "sans-serif"],
+        heading: ["Bebas Neue", "sans-serif"],
+        body: ["Inter", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
