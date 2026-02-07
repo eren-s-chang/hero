@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bangers&family=Caveat:wght@400;500;600;700&family=Patrick+Hand&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -45,10 +45,10 @@
     --sidebar-border: 0 0% 18%;
     --sidebar-ring: 48 80% 55%;
 
-    --font-heading: 'Bebas Neue', sans-serif;
-    --font-manga: 'Bangers', cursive;
-    --font-body: 'Patrick Hand', cursive;
-    --font-handwritten: 'Caveat', cursive;
+    --font-heading: 'Space Grotesk', sans-serif;
+    --font-manga: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-handwritten: 'Inter', sans-serif;
   }
 }
 
@@ -63,13 +63,13 @@
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: var(--font-manga);
-    letter-spacing: 0.05em;
+    font-family: var(--font-heading);
+    letter-spacing: 0.02em;
   }
 }
 
 .font-manga {
-  font-family: var(--font-manga);
+  font-family: var(--font-heading);
 }
 
 /* Subtle glow effect */
@@ -77,27 +77,23 @@
   text-shadow: 0 0 40px hsl(48 80% 55% / 0.3);
 }
 
-/* One Punch Man style title - exact logo match */
+/* One Punch Man style title */
 .opm-title {
-  font-family: 'Bebas Neue', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
   background: linear-gradient(180deg, hsl(0 75% 55%) 0%, hsl(0 70% 40%) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(4px 4px 0 hsl(0 0% 8%)) drop-shadow(6px 6px 0 hsl(0 0% 5%));
-  letter-spacing: 0.08em;
-  font-weight: 400;
+  filter: drop-shadow(2px 2px 0 hsl(0 0% 8%));
+  letter-spacing: 0.02em;
 }
 
-/* Comic style text */
+/* Clean text style */
 .comic-text {
-  font-family: 'Bangers', cursive;
-  text-shadow: 
-    3px 3px 0 hsl(0 0% 10%),
-    -1px -1px 0 hsl(0 0% 10%),
-    1px -1px 0 hsl(0 0% 10%),
-    -1px 1px 0 hsl(0 0% 10%);
-  letter-spacing: 0.06em;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 /* Gradient overlay for hero */
