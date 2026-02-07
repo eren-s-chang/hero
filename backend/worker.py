@@ -77,7 +77,7 @@ RESPONSE_JSON_SCHEMA = {
     "type": "object",
     "properties": {
         "exercise_detected": {"type": "string"},
-        "form_rating_1_to_10": {"type": "integer", "minimum": 1, "maximum": 10},
+        "form_rating_1_to_10": {"type": "integer"},
         "main_mistakes": {
             "type": "array",
             "items": {"type": "string"},
@@ -87,7 +87,7 @@ RESPONSE_JSON_SCHEMA = {
             "items": {
                 "type": "object",
                 "properties": {
-                    "timestamp_seconds": {"type": "number", "minimum": 0},
+                    "timestamp_seconds": {"type": "number"},
                     "mistake": {"type": "string"},
                 },
                 "required": ["timestamp_seconds", "mistake"],
@@ -110,18 +110,27 @@ RESPONSE_JSON_SCHEMA = {
 LANDMARK_NAMES = [lm.name for lm in mp.solutions.pose.PoseLandmark]
 
 
-def _extract_landmarks(video_path: str, every_n: int = 1) -> str:
-    """Read *video_path*, run MediaPipe Pose on every *every_n*-th frame,
+TARGET_SAMPLES_PER_SEC = 3  # ~3 landmark snapshots per second of video
+
+
+def _extract_landmarks(video_path: str, every_n: int | None = None) -> str:
+    """Read *video_path*, run MediaPipe Pose on sampled frames,
     and return a compact text representation of all sampled landmarks.
 
+    If *every_n* is None it is auto-calculated from FPS to yield
+    roughly TARGET_SAMPLES_PER_SEC samples per second.
+
     Format (one line per sampled frame):
-        frame=<N> | <landmark_name>:(x,y,z) <landmark_name>:(x,y,z) ...
+        frame=<N> time_s=<T> | <landmark_name>:(x,y,z) …
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {video_path}")
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    if every_n is None:
+        every_n = max(1, round(fps / TARGET_SAMPLES_PER_SEC))
+    logger.info("Sampling every %d-th frame (fps=%.1f, ~%d samples/sec)", every_n, fps, round(fps / every_n))
 
     pose = mp.solutions.pose.Pose(
         static_image_mode=False,
@@ -147,7 +156,7 @@ def _extract_landmarks(video_path: str, every_n: int = 1) -> str:
                 if result.pose_landmarks:
                     parts: list[str] = []
                     for lm, name in zip(result.pose_landmarks.landmark, LANDMARK_NAMES):
-                        parts.append(f"{name}:({lm.x:.4f},{lm.y:.4f},{lm.z:.4f})")
+                        parts.append(f"{name}:({lm.x:.2f},{lm.y:.2f},{lm.z:.2f})")
                     lines.append(
                         f"frame={frame_idx} time_s={timestamp_s:.3f} | " + " ".join(parts)
                     )
@@ -186,7 +195,7 @@ def _interpret_with_gemini(landmark_text: str) -> dict[str, Any]:
             contents=prompt,
             config=types.GenerateContentConfig(
                 temperature=0.2,
-                max_output_tokens=1024,
+                max_output_tokens=8192,
                 response_mime_type="application/json",
                 response_schema=RESPONSE_JSON_SCHEMA,
             ),
@@ -201,7 +210,7 @@ def _interpret_with_gemini(landmark_text: str) -> dict[str, Any]:
             contents=prompt,
             config={
                 "temperature": 0.2,
-                "max_output_tokens": 1024,
+                "max_output_tokens": 8192,
                 "response_mime_type": "application/json",
             },
         )
@@ -253,7 +262,7 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
 
         # Step A – extract pose landmarks
         logger.info("Step A: extracting landmarks from %s", tmp_path.name)
-        landmark_text = _extract_landmarks(str(tmp_path), every_n=1)
+        landmark_text = _extract_landmarks(str(tmp_path))
 
         # Step B – interpret with Gemini
         logger.info("Step B: sending %d chars to Gemini", len(landmark_text))
