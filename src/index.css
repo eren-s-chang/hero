@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700&family=DM+Serif+Display:ital@0;1&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bangers&family=Nunito:wght@400;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,47 +6,47 @@
 
 @layer base {
   :root {
-    --background: 220 20% 14%;
-    --foreground: 0 0% 95%;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 10%;
 
-    --card: 220 18% 18%;
-    --card-foreground: 0 0% 95%;
+    --card: 45 100% 96%;
+    --card-foreground: 0 0% 10%;
 
-    --popover: 220 18% 18%;
-    --popover-foreground: 0 0% 95%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
 
-    --primary: 168 50% 50%;
-    --primary-foreground: 220 20% 10%;
+    --primary: 45 100% 50%;
+    --primary-foreground: 0 0% 10%;
 
-    --secondary: 220 15% 22%;
-    --secondary-foreground: 0 0% 90%;
+    --secondary: 0 85% 55%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 220 15% 20%;
-    --muted-foreground: 220 10% 60%;
+    --muted: 45 30% 90%;
+    --muted-foreground: 0 0% 40%;
 
-    --accent: 168 50% 50%;
-    --accent-foreground: 220 20% 10%;
+    --accent: 0 85% 55%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 220 15% 25%;
-    --input: 220 15% 25%;
-    --ring: 168 50% 50%;
+    --border: 0 0% 85%;
+    --input: 0 0% 85%;
+    --ring: 45 100% 50%;
 
-    --radius: 0.75rem;
+    --radius: 1rem;
 
-    --sidebar-background: 220 20% 12%;
-    --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 168 50% 50%;
-    --sidebar-primary-foreground: 220 20% 10%;
-    --sidebar-accent: 220 15% 20%;
-    --sidebar-accent-foreground: 0 0% 95%;
-    --sidebar-border: 220 15% 25%;
-    --sidebar-ring: 168 50% 50%;
+    --sidebar-background: 45 100% 96%;
+    --sidebar-foreground: 0 0% 10%;
+    --sidebar-primary: 45 100% 50%;
+    --sidebar-primary-foreground: 0 0% 10%;
+    --sidebar-accent: 0 85% 55%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 85%;
+    --sidebar-ring: 45 100% 50%;
 
-    --font-heading: 'DM Serif Display', serif;
-    --font-body: 'DM Sans', sans-serif;
+    --font-heading: 'Bangers', cursive;
+    --font-body: 'Nunito', sans-serif;
   }
 }
 
@@ -62,5 +62,32 @@
 
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);
+    letter-spacing: 0.05em;
   }
+}
+
+/* Comic-style text shadow */
+.comic-shadow {
+  text-shadow: 3px 3px 0px hsl(0 85% 55%), 
+               6px 6px 0px hsl(0 0% 0% / 0.2);
+}
+
+/* Speed lines background */
+.speed-lines {
+  background-image: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 2px,
+    hsl(0 0% 0% / 0.03) 2px,
+    hsl(0 0% 0% / 0.03) 4px
+  );
+}
+
+/* Action burst */
+.action-burst {
+  background: radial-gradient(
+    ellipse at center,
+    hsl(45 100% 50% / 0.3) 0%,
+    transparent 70%
+  );
 }
