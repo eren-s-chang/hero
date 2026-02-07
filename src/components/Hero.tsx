@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
 import heroImage from "@/assets/hero-exercise.jpg";
 import { ArrowRight } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 
 const Hero = () => {
+  const navigate = useNavigate();
 
   return (
     <section className="relative min-h-screen flex flex-col overflow-hidden bg-background">
@@ -173,6 +175,7 @@ const Hero = () => {
             <motion.button 
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.98 }}
+              onClick={() => navigate("/demo")}
               className="font-heading bg-secondary text-secondary-foreground px-8 py-4 text-2xl sm:text-3xl uppercase flex items-center gap-3 hover:bg-secondary/90 transition-colors rounded-md tracking-wider"
             >
               TRY DEMO
