@@ -50,9 +50,7 @@ celery_app.conf.update(
     task_track_started=True,
     task_acks_late=True,
     worker_prefetch_multiplier=1,
-    broker_transport_options={
-        "max_memory_policy": "allkeys-lru",
-    },
+    result_expires=3600,          # auto-delete results after 1 hour
 )
 
 # ---------------------------------------------------------------------------

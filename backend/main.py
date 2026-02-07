@@ -141,7 +141,16 @@ async def analyze(video: UploadFile = File(...)):
 
     # --- Dispatch Celery task (video bytes as base64) -------------------------
     video_b64 = base64.b64encode(video_bytes).decode("ascii")
-    task = analyze_video.delay(video_b64, ext)
+
+    try:
+        task = analyze_video.delay(video_b64, ext)
+    except Exception as exc:
+        logger.error("Failed to enqueue task (Redis may be full): %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Service temporarily unavailable. The processing queue is full. Please try again later.",
+        )
+
     return JSONResponse(
         status_code=202,
         content={"task_id": task.id, "detail": "Video accepted. Processing started."},
