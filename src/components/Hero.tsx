@@ -173,17 +173,17 @@ const Hero = () => {
             transition={{ duration: 0.6, delay: 0.9 }}
           >
             <motion.button 
-              whileHover={{ scale: 1.05, boxShadow: "0 0 30px hsl(0 75% 50% / 0.5)" }}
+              whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.98 }}
               onClick={() => navigate("/demo")}
-              className="font-heading bg-transparent text-secondary px-8 py-4 text-3xl sm:text-4xl uppercase flex items-center gap-3 hover:bg-secondary/10 transition-all duration-300 tracking-widest"
+              className="font-heading bg-secondary text-secondary-foreground px-8 py-4 text-2xl sm:text-3xl uppercase flex items-center gap-3 hover:bg-secondary/90 transition-colors rounded-md tracking-wider"
             >
               TRY DEMO
               <motion.span
-                animate={{ x: [0, 8, 0] }}
+                animate={{ x: [0, 5, 0] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
               >
-                <ArrowRight className="w-6 h-6" />
+                <ArrowRight className="w-5 h-5" />
               </motion.span>
             </motion.button>
           </motion.div>

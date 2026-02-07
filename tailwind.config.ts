@@ -14,10 +14,10 @@ export default {
     },
     extend: {
       fontFamily: {
-        heading: ["Space Grotesk", "sans-serif"],
-        manga: ["Space Grotesk", "sans-serif"],
-        body: ["Inter", "sans-serif"],
-        handwritten: ["Inter", "sans-serif"],
+        heading: ["Bebas Neue", "sans-serif"],
+        manga: ["Bangers", "cursive"],
+        body: ["Patrick Hand", "cursive"],
+        handwritten: ["Caveat", "cursive"],
       },
       colors: {
         border: "hsl(var(--border))",
