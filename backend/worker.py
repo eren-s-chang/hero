@@ -90,7 +90,7 @@ def _extract_landmarks(video_path: str, every_n: int = 1) -> str:
 
     pose = mp.solutions.pose.Pose(
         static_image_mode=False,
-        model_complexity=1,  # 0=lite, 1=full, 2=heavy
+        model_complexity=0,  # 0=lite, 1=full, 2=heavy
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
     )
@@ -182,7 +182,7 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
 
         # Step A – extract pose landmarks
         logger.info("Step A: extracting landmarks from %s", tmp_path.name)
-        landmark_text = _extract_landmarks(str(tmp_path), every_n=1)
+        landmark_text = _extract_landmarks(str(tmp_path), every_n=5)
 
         # Step B – interpret with Gemini
         logger.info("Step B: sending %d chars to Gemini", len(landmark_text))
