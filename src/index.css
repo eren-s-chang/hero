@@ -6,6 +6,51 @@
 
 @layer base {
   :root {
+    --background: 48 60% 92%;
+    --foreground: 0 0% 10%;
+
+    --card: 48 50% 88%;
+    --card-foreground: 0 0% 10%;
+
+    --popover: 48 50% 88%;
+    --popover-foreground: 0 0% 10%;
+
+    --primary: 0 75% 50%;
+    --primary-foreground: 0 0% 98%;
+
+    --secondary: 48 90% 55%;
+    --secondary-foreground: 0 0% 5%;
+
+    --muted: 48 30% 85%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 0 75% 50%;
+    --accent-foreground: 0 0% 98%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 48 30% 80%;
+    --input: 48 30% 80%;
+    --ring: 0 75% 50%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 48 50% 90%;
+    --sidebar-foreground: 0 0% 10%;
+    --sidebar-primary: 0 75% 50%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 48 90% 55%;
+    --sidebar-accent-foreground: 0 0% 5%;
+    --sidebar-border: 48 30% 80%;
+    --sidebar-ring: 0 75% 50%;
+
+    --font-heading: 'Bebas Neue', sans-serif;
+    --font-manga: 'Bangers', cursive;
+    --font-body: 'Inter', sans-serif;
+  }
+
+  .dark {
     --background: 0 0% 2%;
     --foreground: 0 0% 95%;
 
@@ -24,7 +69,7 @@
     --muted: 0 0% 12%;
     --muted-foreground: 0 0% 55%;
 
-    --accent: 48 80% 55%;
+    --accent: 48 90% 55%;
     --accent-foreground: 0 0% 5%;
 
     --destructive: 0 84.2% 60.2%;
@@ -32,22 +77,16 @@
 
     --border: 0 0% 18%;
     --input: 0 0% 18%;
-    --ring: 48 80% 55%;
-
-    --radius: 0.5rem;
+    --ring: 48 90% 55%;
 
     --sidebar-background: 0 0% 5%;
     --sidebar-foreground: 0 0% 95%;
-    --sidebar-primary: 48 80% 55%;
+    --sidebar-primary: 48 90% 55%;
     --sidebar-primary-foreground: 0 0% 5%;
-    --sidebar-accent: 350 60% 40%;
+    --sidebar-accent: 0 75% 50%;
     --sidebar-accent-foreground: 0 0% 95%;
     --sidebar-border: 0 0% 18%;
-    --sidebar-ring: 48 80% 55%;
-
-    --font-heading: 'Bebas Neue', sans-serif;
-    --font-manga: 'Bangers', cursive;
-    --font-body: 'Inter', sans-serif;
+    --sidebar-ring: 48 90% 55%;
   }
 }
 

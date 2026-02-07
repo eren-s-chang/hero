@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import heroImage from "@/assets/hero-exercise.jpg";
 import { ArrowRight } from "lucide-react";
+import ThemeToggle from "./ThemeToggle";
 
 const Hero = () => {
 
@@ -43,16 +44,19 @@ const Hero = () => {
         ))}
       </div>
 
-      {/* Nav - bigger HERO title */}
+      {/* Nav - bigger HERO title with theme toggle */}
       <motion.nav 
         initial={{ y: -30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
         className="relative z-30 flex items-center justify-between px-6 md:px-12 py-8"
       >
-        <span className="opm-title text-8xl md:text-9xl lg:text-[10rem]">
-          HERO
-        </span>
+        <div className="flex items-center gap-4">
+          <ThemeToggle />
+          <span className="opm-title text-8xl md:text-9xl lg:text-[10rem]">
+            HERO
+          </span>
+        </div>
       </motion.nav>
 
       {/* Spacer to push content down */}
