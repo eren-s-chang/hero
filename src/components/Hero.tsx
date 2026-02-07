@@ -43,20 +43,23 @@ const Hero = () => {
         ))}
       </div>
 
-      {/* Nav */}
+      {/* Nav - bigger HERO title */}
       <motion.nav 
         initial={{ y: -30, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.6, ease: "easeOut" }}
         className="relative z-30 flex items-center justify-between px-6 md:px-12 py-8"
       >
-        <span className="opm-title text-6xl md:text-7xl lg:text-8xl">
+        <span className="opm-title text-8xl md:text-9xl lg:text-[10rem]">
           HERO
         </span>
       </motion.nav>
 
-      {/* Main hero content - left aligned */}
-      <div className="relative z-20 flex-1 flex items-center px-6 md:px-12">
+      {/* Spacer to push content down */}
+      <div className="flex-1" />
+
+      {/* Main hero content - bottom left aligned */}
+      <div className="relative z-20 px-6 md:px-12 pb-16">
         <div className="max-w-2xl">
           {/* Main headline - horizontal */}
           <motion.div 
