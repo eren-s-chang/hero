@@ -11,7 +11,10 @@ GET  /health         – Liveness probe.
 from __future__ import annotations
 
 import base64
+import logging
 import os
+import subprocess
+import tempfile
 from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile, HTTPException
@@ -43,6 +46,61 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def _compress_video(raw_bytes: bytes, ext: str) -> bytes:
+    """Re-encode video with FFmpeg to shrink it before sending to Redis.
+
+    Strategy: scale to 480p, CRF 30, fast preset, strip audio.
+    Falls back to the original bytes if FFmpeg is unavailable or fails.
+    """
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as src:
+        src.write(raw_bytes)
+        src_path = src.name
+
+    dst_path = src_path + ".compressed.mp4"
+
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y",
+                "-i", src_path,
+                "-vf", "scale=-2:480",      # max 480p height
+                "-c:v", "libx264",
+                "-preset", "ultrafast",
+                "-crf", "30",
+                "-an",                       # strip audio
+                "-movflags", "+faststart",
+                dst_path,
+            ],
+            check=True,
+            capture_output=True,
+            timeout=120,
+        )
+        compressed = Path(dst_path).read_bytes()
+        ratio = len(compressed) / len(raw_bytes) * 100
+        logger.info(
+            "Compressed %s: %.1f MB → %.1f MB (%.0f%%)",
+            ext,
+            len(raw_bytes) / 1e6,
+            len(compressed) / 1e6,
+            ratio,
+        )
+        return compressed
+
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        logger.warning("FFmpeg compression failed, using original bytes: %s", exc)
+        return raw_bytes
+
+    finally:
+        Path(src_path).unlink(missing_ok=True)
+        Path(dst_path).unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +135,9 @@ async def analyze(video: UploadFile = File(...)):
             status_code=413,
             detail=f"File too large ({file_size_mb:.1f} MB). Max {MAX_FILE_SIZE_MB} MB.",
         )
+
+    # --- Compress before sending through Redis --------------------------------
+    video_bytes = _compress_video(video_bytes, ext)
 
     # --- Dispatch Celery task (video bytes as base64) -------------------------
     video_b64 = base64.b64encode(video_bytes).decode("ascii")

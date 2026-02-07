@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # System deps required by MediaPipe / OpenCV-headless
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+        ffmpeg \
         libglib2.0-0 \
         libsm6 \
         libxext6 \
