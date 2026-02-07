@@ -176,7 +176,7 @@ const Hero = () => {
               whileHover={{ scale: 1.05, boxShadow: "0 0 30px hsl(0 75% 50% / 0.5)" }}
               whileTap={{ scale: 0.98 }}
               onClick={() => navigate("/demo")}
-              className="font-manga bg-transparent border-4 border-secondary text-secondary px-8 py-4 text-3xl sm:text-4xl uppercase flex items-center gap-3 hover:bg-secondary/10 transition-all duration-300 tracking-widest comic-text"
+              className="font-heading bg-transparent text-secondary px-8 py-4 text-3xl sm:text-4xl uppercase flex items-center gap-3 hover:bg-secondary/10 transition-all duration-300 tracking-widest"
             >
               TRY DEMO
               <motion.span
