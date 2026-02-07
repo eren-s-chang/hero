@@ -23,7 +23,7 @@ from typing import Any
 
 import cv2
 import mediapipe as mp
-import google.generativeai as genai
+from google import genai
 from celery import Celery
 
 # ---------------------------------------------------------------------------
@@ -67,9 +67,43 @@ SYSTEM_PROMPT = (
     "  • exercise_detected  (string)\n"
     "  • form_rating_1_to_10  (integer 1-10)\n"
     "  • main_mistakes  (list of strings)\n"
+    "  • mistakes_with_timestamps  (list of objects with timestamp_seconds and mistake)\n"
     "  • actionable_correction  (string)\n"
     "Do NOT wrap the JSON in markdown code-fences. Return raw JSON only."
 )
+
+RESPONSE_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "exercise_detected": {"type": "string"},
+        "form_rating_1_to_10": {"type": "integer", "minimum": 1, "maximum": 10},
+        "main_mistakes": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "mistakes_with_timestamps": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "timestamp_seconds": {"type": "number", "minimum": 0},
+                    "mistake": {"type": "string"},
+                },
+                "required": ["timestamp_seconds", "mistake"],
+                "additionalProperties": False,
+            },
+        },
+        "actionable_correction": {"type": "string"},
+    },
+    "required": [
+        "exercise_detected",
+        "form_rating_1_to_10",
+        "main_mistakes",
+        "mistakes_with_timestamps",
+        "actionable_correction",
+    ],
+    "additionalProperties": False,
+}
 
 # ---------------------------------------------------------------------------
 # MediaPipe helpers
@@ -88,6 +122,8 @@ def _extract_landmarks(video_path: str, every_n: int = 1) -> str:
     if not cap.isOpened():
         raise RuntimeError(f"Cannot open video: {video_path}")
 
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+
     pose = mp.solutions.pose.Pose(
         static_image_mode=False,
         model_complexity=0,  # 0=lite, 1=full, 2=heavy
@@ -105,6 +141,7 @@ def _extract_landmarks(video_path: str, every_n: int = 1) -> str:
                 break
 
             if frame_idx % every_n == 0:
+                timestamp_s = frame_idx / fps
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 result = pose.process(rgb)
 
@@ -112,7 +149,9 @@ def _extract_landmarks(video_path: str, every_n: int = 1) -> str:
                     parts: list[str] = []
                     for lm, name in zip(result.pose_landmarks.landmark, LANDMARK_NAMES):
                         parts.append(f"{name}:({lm.x:.4f},{lm.y:.4f},{lm.z:.4f})")
-                    lines.append(f"frame={frame_idx} | " + " ".join(parts))
+                    lines.append(
+                        f"frame={frame_idx} time_s={timestamp_s:.3f} | " + " ".join(parts)
+                    )
 
             frame_idx += 1
     finally:
@@ -134,19 +173,23 @@ def _interpret_with_gemini(landmark_text: str) -> dict[str, Any]:
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set.")
 
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        model_name=GEMINI_MODEL,
-        system_instruction=SYSTEM_PROMPT,
+    client = genai.Client(api_key=GEMINI_API_KEY)
+
+    prompt = (
+        f"{SYSTEM_PROMPT}\n\n"
+        "Here are the 3D pose landmarks extracted from a workout video:\n\n"
+        f"{landmark_text}"
     )
 
-    response = model.generate_content(
-        f"Here are the 3D pose landmarks extracted from a workout video:\n\n{landmark_text}",
-        generation_config=genai.GenerationConfig(
-            temperature=0.2,
-            max_output_tokens=1024,
-            response_mime_type="application/json",
-        ),
+    response = client.models.generate_content(
+        model=GEMINI_MODEL,
+        contents=prompt,
+        config={
+            "temperature": 0.2,
+            "max_output_tokens": 1024,
+            "response_mime_type": "application/json",
+            "response_json_schema": RESPONSE_JSON_SCHEMA,
+        },
     )
 
     raw = response.text.strip()
