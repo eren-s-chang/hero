@@ -408,7 +408,7 @@ const Demo = () => {
 
               {duration > 0 && (
                 <div className="mb-6 border border-border rounded-md p-4 bg-background/60">
-                  <div className="flex items-center justify-between text-sm text-muted-foreground mb-3">
+                  <div className="flex items-center justify-between text-sm text-muted-foreground mb-3 font-modern font-semibold">
                     <span>Trim start: {formatTime(trimStart)}</span>
                     <span>Trim end: {formatTime(trimEnd)}</span>
                     <span>Length: {formatTime(Math.max(0, trimEnd - trimStart))}</span>
@@ -489,6 +489,9 @@ const Demo = () => {
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Trimming runs locally with WebCodecs and may take a few seconds.
+                    </p>
+                    <p className="text-xs text-muted-foreground font-modern">
+                      Trimming re-records playback between start and end times in real time.
                     </p>
                   </div>
                 </div>

@@ -18,6 +18,7 @@ export default {
         manga: ["Bangers", "cursive"],
         body: ["Patrick Hand", "cursive"],
         handwritten: ["Caveat", "cursive"],
+        modern: ["Rajdhani", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",

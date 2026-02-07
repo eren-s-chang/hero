@@ -52,8 +52,8 @@ const HowItWorks = () => {
           transition={{ duration: 0.5 }}
           className="mb-16"
         >
-          <p className="font-heading text-primary text-lg tracking-wider mb-4">PROCESS</p>
-          <h2 className="font-heading text-6xl md:text-7xl text-foreground tracking-wider">
+          <p className="font-modern text-primary text-sm tracking-[0.3em] mb-4 font-semibold">PROCESS</p>
+          <h2 className="font-modern text-5xl md:text-6xl text-foreground tracking-wider font-bold">
             HOW IT WORKS
           </h2>
         </motion.div>
@@ -76,10 +76,10 @@ const HowItWorks = () => {
                 <div className="w-14 h-14 flex items-center justify-center text-primary bg-primary/10 border-2 border-primary">
                   <step.icon className="w-7 h-7" strokeWidth={2} />
                 </div>
-                <span className="font-heading text-muted-foreground/40 text-6xl">0{i + 1}</span>
+                <span className="font-modern text-muted-foreground/40 text-5xl font-bold">0{i + 1}</span>
               </div>
-              <h3 className="font-heading text-3xl text-foreground mb-4 tracking-wider">{step.title}</h3>
-              <p className="text-muted-foreground text-sm leading-relaxed font-body">{step.description}</p>
+              <h3 className="font-modern text-2xl text-foreground mb-4 tracking-wider font-bold">{step.title}</h3>
+              <p className="text-muted-foreground text-sm leading-relaxed font-modern font-medium">{step.description}</p>
             </motion.div>
           ))}
         </motion.div>
