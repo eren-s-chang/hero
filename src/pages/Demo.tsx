@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { Upload, ArrowLeft, Video, X } from "lucide-react";
 import { useState, useRef } from "react";
+import { ArrayBufferTarget, Muxer } from "webm-muxer";
 import { useNavigate } from "react-router-dom";
 
 const Demo = () => {
@@ -25,16 +26,6 @@ const Demo = () => {
       .padStart(2, "0");
     const tenths = Math.floor((value % 1) * 10);
     return `${minutes}:${seconds}.${tenths}`;
-  };
-
-  const getSupportedMimeType = () => {
-    const candidates = [
-      "video/webm;codecs=vp9,opus",
-      "video/webm;codecs=vp8,opus",
-      "video/webm",
-      "video/mp4",
-    ];
-    return candidates.find((type) => MediaRecorder.isTypeSupported(type)) || "video/webm";
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -105,43 +96,190 @@ const Demo = () => {
     if (!video || !sourceFile) return;
     if (trimEnd <= trimStart) return;
     if (!(video as any).captureStream) return;
+    if (!(window as any).VideoEncoder || !(window as any).AudioEncoder) return;
+    if (!(window as any).MediaStreamTrackProcessor) return;
 
     setIsTrimming(true);
-    const mimeType = getSupportedMimeType();
-    const recorder = new MediaRecorder((video as any).captureStream(), { mimeType });
-    const chunks: BlobPart[] = [];
+    const waitForSeek = (targetTime: number) =>
+      new Promise<void>((resolve) => {
+        const handleSeeked = () => {
+          video.removeEventListener("seeked", handleSeeked);
+          resolve();
+        };
 
-    const blobPromise = new Promise<Blob>((resolve, reject) => {
-      recorder.ondataavailable = (event) => {
-        if (event.data.size) chunks.push(event.data);
-      };
-      recorder.onerror = () => reject(new Error("Recording failed"));
-      recorder.onstop = () => resolve(new Blob(chunks, { type: mimeType }));
+        if (Math.abs(video.currentTime - targetTime) < 0.01) {
+          resolve();
+          return;
+        }
+
+        video.addEventListener("seeked", handleSeeked, { once: true });
+        video.currentTime = targetTime;
+      });
+
+    const trimDuration = Math.max(0, trimEnd - trimStart);
+    const muxerTarget = new ArrayBufferTarget();
+    const stream = (video as any).captureStream();
+    const [videoTrack] = stream.getVideoTracks();
+    const [audioTrack] = stream.getAudioTracks();
+    const videoSettings = videoTrack?.getSettings?.() ?? {};
+    const audioSettings = audioTrack?.getSettings?.() ?? {};
+    const width = video.videoWidth || Number(videoSettings.width) || 1280;
+    const height = video.videoHeight || Number(videoSettings.height) || 720;
+    const frameRate = Number(videoSettings.frameRate) || 30;
+    const sampleRate = Number(audioSettings.sampleRate) || 48000;
+    const channelCount = Number(audioSettings.channelCount) || 2;
+
+    const muxer = new Muxer({
+      target: muxerTarget,
+      video: {
+        codec: "V_VP8",
+        width,
+        height,
+        frameRate,
+      },
+      audio: audioTrack
+        ? {
+            codec: "A_OPUS",
+            sampleRate,
+            numberOfChannels: channelCount,
+          }
+        : undefined,
     });
 
-    const stopAt = trimEnd;
-    const handleTimeUpdate = () => {
-      if (video.currentTime >= stopAt) {
-        video.pause();
-        recorder.stop();
-        video.removeEventListener("timeupdate", handleTimeUpdate);
-      }
+    let videoTimestampOffset: number | null = null;
+    let audioTimestampOffset: number | null = null;
+    let hasKeyframe = false;
+    let stopRequested = false;
+
+    const handleVideoChunk = (chunk: EncodedVideoChunk, meta?: EncodedVideoChunkMetadata) => {
+      if (videoTimestampOffset === null) videoTimestampOffset = chunk.timestamp;
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      const adjustedChunk = new EncodedVideoChunk({
+        type: chunk.type,
+        timestamp: chunk.timestamp - (videoTimestampOffset ?? 0),
+        duration: chunk.duration ?? undefined,
+        data,
+      });
+      muxer.addVideoChunk(adjustedChunk, meta);
+    };
+
+    const handleAudioChunk = (chunk: EncodedAudioChunk, meta?: EncodedAudioChunkMetadata) => {
+      if (audioTimestampOffset === null) audioTimestampOffset = chunk.timestamp;
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      const adjustedChunk = new EncodedAudioChunk({
+        type: chunk.type,
+        timestamp: chunk.timestamp - (audioTimestampOffset ?? 0),
+        duration: chunk.duration ?? undefined,
+        data,
+      });
+      muxer.addAudioChunk(adjustedChunk, meta);
+    };
+
+    const videoEncoder = new VideoEncoder({
+      output: handleVideoChunk,
+      error: () => {},
+    });
+    const audioEncoder = audioTrack
+      ? new AudioEncoder({
+          output: handleAudioChunk,
+          error: () => {},
+        })
+      : null;
+
+    videoEncoder.configure({
+      codec: "vp8",
+      width,
+      height,
+      bitrate: 2_500_000,
+      framerate: frameRate,
+    });
+
+    if (audioEncoder) {
+      audioEncoder.configure({
+        codec: "opus",
+        sampleRate,
+        numberOfChannels: channelCount,
+        bitrate: 128_000,
+      });
+    }
+
+    const videoProcessor = new (window as any).MediaStreamTrackProcessor({ track: videoTrack });
+    const audioProcessor = audioTrack
+      ? new (window as any).MediaStreamTrackProcessor({ track: audioTrack })
+      : null;
+    const videoReader = videoProcessor.readable.getReader();
+    const audioReader = audioProcessor?.readable.getReader() ?? null;
+
+    const stopCapture = () => {
+      if (stopRequested) return;
+      stopRequested = true;
+      if (!video.paused) video.pause();
     };
 
     try {
-      recorder.start();
-      video.currentTime = trimStart;
+      const previousMuted = video.muted;
+      video.muted = true;
+      await waitForSeek(trimStart);
       await video.play();
-      video.addEventListener("timeupdate", handleTimeUpdate);
-      const blob = await blobPromise;
+
+      const timeGuard = window.setInterval(() => {
+        if (video.currentTime >= trimEnd) stopCapture();
+      }, 20);
+
+      const consumeVideo = (async () => {
+        while (!stopRequested) {
+          const result = await videoReader.read();
+          if (result.done) break;
+          const frame = result.value as VideoFrame;
+          try {
+            if (stopRequested) break;
+            if (!hasKeyframe) {
+              videoEncoder.encode(frame, { keyFrame: true });
+              hasKeyframe = true;
+            } else {
+              videoEncoder.encode(frame);
+            }
+          } finally {
+            frame.close();
+          }
+        }
+      })();
+
+      const consumeAudio = audioReader
+        ? (async () => {
+            while (!stopRequested) {
+              const result = await audioReader.read();
+              if (result.done) break;
+              const audioData = result.value as AudioData;
+              try {
+                if (stopRequested) break;
+                audioEncoder?.encode(audioData);
+              } finally {
+                audioData.close();
+              }
+            }
+          })()
+        : Promise.resolve();
+
+      await Promise.all([consumeVideo, consumeAudio]);
+      window.clearInterval(timeGuard);
+      await videoReader.cancel();
+      if (audioReader) await audioReader.cancel();
+      await videoEncoder.flush();
+      if (audioEncoder) await audioEncoder.flush();
+      muxer.finalize();
+
+      video.muted = previousMuted;
+      const blob = new Blob([muxerTarget.buffer], { type: "video/webm" });
       const baseName = sourceFile.name.replace(/\.[^/.]+$/, "");
-      const extension = mimeType.includes("mp4") ? "mp4" : "webm";
-      const nextFile = new File([blob], `${baseName}-trimmed.${extension}`, { type: blob.type });
+      const nextFile = new File([blob], `${baseName}-trimmed.webm`, { type: blob.type });
       setTrimmedFile(nextFile);
       if (trimmedUrl) URL.revokeObjectURL(trimmedUrl);
       setTrimmedUrl(URL.createObjectURL(nextFile));
     } catch (error) {
-      recorder.stop();
+      stopCapture();
     } finally {
       setIsTrimming(false);
     }
@@ -350,7 +488,7 @@ const Demo = () => {
                       </motion.button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Trimming re-records playback between start and end times in real time.
+                      Trimming runs locally with WebCodecs and may take a few seconds.
                     </p>
                   </div>
                 </div>
