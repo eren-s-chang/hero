@@ -16,6 +16,90 @@ const Hero = () => {
         {/* Gradient overlay to blend with background */}
         <div className="absolute inset-0 hero-gradient" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-background/60" />
+        
+        {/* Steam/Aura effect */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          {/* Rising steam particles */}
+          {[...Array(12)].map((_, i) => (
+            <motion.div
+              key={`steam-${i}`}
+              className="absolute w-16 h-24 rounded-full"
+              style={{
+                right: `${15 + (i % 4) * 15}%`,
+                bottom: `${10 + (i % 3) * 5}%`,
+                background: `radial-gradient(ellipse at center, hsl(48 80% 55% / ${0.08 + (i % 3) * 0.04}) 0%, transparent 70%)`,
+                filter: 'blur(8px)',
+              }}
+              animate={{
+                y: [0, -150 - (i % 3) * 50],
+                x: [0, (i % 2 === 0 ? 20 : -20)],
+                opacity: [0, 0.6, 0],
+                scale: [0.5, 1.5, 2],
+              }}
+              transition={{
+                duration: 3 + (i % 3),
+                repeat: Infinity,
+                delay: i * 0.4,
+                ease: "easeOut",
+              }}
+            />
+          ))}
+          
+          {/* Intense aura glow pulses */}
+          {[...Array(6)].map((_, i) => (
+            <motion.div
+              key={`aura-${i}`}
+              className="absolute rounded-full"
+              style={{
+                right: `${20 + (i % 3) * 10}%`,
+                top: `${30 + (i % 2) * 20}%`,
+                width: `${80 + i * 20}px`,
+                height: `${120 + i * 30}px`,
+                background: `radial-gradient(ellipse at center, hsl(0 75% 50% / ${0.06 + (i % 2) * 0.03}) 0%, transparent 60%)`,
+                filter: 'blur(12px)',
+              }}
+              animate={{
+                opacity: [0.3, 0.7, 0.3],
+                scale: [1, 1.2, 1],
+              }}
+              transition={{
+                duration: 2 + (i % 2),
+                repeat: Infinity,
+                delay: i * 0.3,
+                ease: "easeInOut",
+              }}
+            />
+          ))}
+          
+          {/* Wispy steam trails */}
+          {[...Array(8)].map((_, i) => (
+            <motion.div
+              key={`wisp-${i}`}
+              className="absolute"
+              style={{
+                right: `${10 + i * 8}%`,
+                bottom: '5%',
+                width: '4px',
+                height: '60px',
+                background: `linear-gradient(to top, transparent, hsl(48 80% 55% / 0.15), transparent)`,
+                filter: 'blur(3px)',
+                borderRadius: '50%',
+              }}
+              animate={{
+                y: [0, -200],
+                x: [0, (i % 2 === 0 ? 30 : -30), 0],
+                opacity: [0, 0.5, 0],
+                scaleY: [1, 1.5, 0.5],
+              }}
+              transition={{
+                duration: 4 + (i % 2),
+                repeat: Infinity,
+                delay: i * 0.5,
+                ease: "easeOut",
+              }}
+            />
+          ))}
+        </div>
       </div>
 
       {/* Animated background particles */}
