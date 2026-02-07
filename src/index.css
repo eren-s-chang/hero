@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bangers&family=Caveat:wght@400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=Patrick+Hand&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Bangers&family=Caveat:wght@400;500;600;700&family=Rajdhani:wght@300;400;500;600;700&family=Patrick+Hand&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -49,7 +49,7 @@
     --font-manga: 'Bangers', cursive;
     --font-body: 'Patrick Hand', cursive;
     --font-handwritten: 'Caveat', cursive;
-    --font-modern: 'Orbitron', sans-serif;
+    --font-modern: 'Rajdhani', sans-serif;
   }
 }
 
