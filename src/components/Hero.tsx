@@ -58,7 +58,7 @@ const Hero = () => {
                 bottom: `${10 + (i % 4) * 5}%`,
                 width: `${40 + (i % 3) * 20}px`,
                 height: `${60 + (i % 3) * 30}px`,
-                background: `radial-gradient(ellipse at center, hsl(48 90% 60% / 0.25) 0%, hsl(48 80% 55% / 0.1) 40%, transparent 70%)`,
+                background: `radial-gradient(ellipse at center, hsl(0 0% 100% / 0.35) 0%, hsl(0 0% 95% / 0.15) 40%, transparent 70%)`,
                 filter: 'blur(6px)',
               }}
               animate={{
@@ -86,7 +86,7 @@ const Hero = () => {
                 bottom: '10%',
                 width: '6px',
                 height: '80px',
-                background: `linear-gradient(to top, transparent, hsl(48 90% 60% / 0.4), hsl(48 80% 55% / 0.2), transparent)`,
+                background: `linear-gradient(to top, transparent, hsl(0 0% 100% / 0.5), hsl(0 0% 95% / 0.25), transparent)`,
                 filter: 'blur(4px)',
                 borderRadius: '50%',
               }}
