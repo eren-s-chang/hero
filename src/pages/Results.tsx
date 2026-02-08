@@ -25,6 +25,7 @@ import {
 } from "@/lib/api";
 import { fetchCorrectionAudio } from "@/lib/api";
 import SkeletonOverlay from "@/components/SkeletonOverlay";
+import SaitamaFace from "@/assets/saitama face.png";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -166,6 +167,7 @@ export default function Results() {
   // Correction audio
   const [correctionAudioUrl, setCorrectionAudioUrl] = useState<string>("");
   const audioRef = useRef<HTMLAudioElement>(null);
+  const [audioPlaying, setAudioPlaying] = useState(false);
 
   // ---- Polling loop --------------------------------------------------------
   useEffect(() => {
@@ -422,6 +424,9 @@ export default function Results() {
                   src={correctionAudioUrl}
                   autoPlay={false}
                   controls={false}
+                  onPlay={() => setAudioPlaying(true)}
+                  onEnded={() => setAudioPlaying(false)}
+                  onPause={() => setAudioPlaying(false)}
                 />
               )}
         {/* Particles */}
@@ -517,8 +522,26 @@ export default function Results() {
           src={correctionAudioUrl}
           autoPlay={false}
           controls={false}
+          onPlay={() => setAudioPlaying(true)}
+          onEnded={() => setAudioPlaying(false)}
+          onPause={() => setAudioPlaying(false)}
         />
       )}
+
+      {/* Animated Saitama face: pops up when correction audio plays */}
+      <AnimatePresence>
+        {audioPlaying && (
+          <motion.img
+            src={SaitamaFace}
+            alt="Saitama face"
+            initial={{ opacity: 0, y: 40, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 40, scale: 0.9 }}
+            transition={{ duration: 0.45, ease: "easeOut" }}
+            className="fixed bottom-6 right-6 w-32 h-32 z-50 pointer-events-none drop-shadow-2xl"
+          />
+        )}
+      </AnimatePresence>
       {/* Particles */}
       <div className="absolute inset-0 pointer-events-none">
         {[...Array(6)].map((_, i) => (
