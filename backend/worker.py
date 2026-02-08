@@ -176,16 +176,17 @@ def _compute_angles(landmarks) -> dict[str, float]:
 
 
 def _process_video(
-    video_path: str, every_n: int | None = None
+    video_path: str, angle_every_n: int | None = None
 ) -> tuple[str, list[dict[str, Any]]]:
-    """Run MediaPipe on sampled frames.
+    """Run MediaPipe on *every* frame for smooth frontend overlay,
+    but only compute joint angles on sampled frames for the LLM.
 
     Returns
     -------
     angle_text : str
-        Compact time-series of joint angles (one line per frame) for the LLM.
+        Compact time-series of joint angles (sampled) for the LLM.
     raw_frames : list[dict]
-        Per-frame raw landmark data for the frontend overlay.
+        Per-frame raw landmark data (every frame) for the frontend overlay.
         Each dict: {"time_s": float, "landmarks": [{name, x, y, z}, ...]}
     """
     cap = cv2.VideoCapture(video_path)
@@ -193,11 +194,11 @@ def _process_video(
         raise RuntimeError(f"Cannot open video: {video_path}")
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    if every_n is None:
-        every_n = max(1, round(fps / TARGET_SAMPLES_PER_SEC))
+    if angle_every_n is None:
+        angle_every_n = max(1, round(fps / TARGET_SAMPLES_PER_SEC))
     logger.info(
-        "Sampling every %d-th frame (fps=%.1f, ~%d samples/sec)",
-        every_n, fps, round(fps / every_n),
+        "Landmarks: every frame | Angles: every %d-th frame (fps=%.1f, ~%d angle samples/sec)",
+        angle_every_n, fps, round(fps / angle_every_n),
     )
 
     pose = mp.solutions.pose.Pose(
@@ -217,27 +218,27 @@ def _process_video(
             if not ret:
                 break
 
-            if frame_idx % every_n == 0:
-                timestamp_s = round(frame_idx / fps, 3)
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                result = pose.process(rgb)
+            timestamp_s = round(frame_idx / fps, 3)
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            result = pose.process(rgb)
 
-                if result.pose_landmarks:
-                    # ── Angles → LLM ──────────────────────────
+            if result.pose_landmarks:
+                # ── Raw landmarks → Redis/frontend (EVERY frame) ──
+                lm_list = [
+                    {"name": name, "x": round(lm.x, 4), "y": round(lm.y, 4), "z": round(lm.z, 4)}
+                    for lm, name in zip(
+                        result.pose_landmarks.landmark, LANDMARK_NAMES
+                    )
+                ]
+                raw_frames.append({"time_s": timestamp_s, "landmarks": lm_list})
+
+                # ── Angles → LLM (sampled frames only) ───────────
+                if frame_idx % angle_every_n == 0:
                     angles = _compute_angles(result.pose_landmarks)
                     angle_parts = [f"{k}={v}" for k, v in angles.items()]
                     angle_lines.append(
                         f"t={timestamp_s:.3f} " + " ".join(angle_parts)
                     )
-
-                    # ── Raw landmarks → Redis/frontend ────────
-                    lm_list = [
-                        {"name": name, "x": round(lm.x, 4), "y": round(lm.y, 4), "z": round(lm.z, 4)}
-                        for lm, name in zip(
-                            result.pose_landmarks.landmark, LANDMARK_NAMES
-                        )
-                    ]
-                    raw_frames.append({"time_s": timestamp_s, "landmarks": lm_list})
 
             frame_idx += 1
     finally:
@@ -248,8 +249,8 @@ def _process_video(
         raise RuntimeError("MediaPipe could not detect any pose in the video.")
 
     logger.info(
-        "Processed %d / %d frames → %d angle snapshots",
-        len(angle_lines), frame_idx, len(angle_lines),
+        "Processed %d frames → %d landmark frames, %d angle samples",
+        frame_idx, len(raw_frames), len(angle_lines),
     )
     return "\n".join(angle_lines), raw_frames
 
