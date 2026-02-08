@@ -32,6 +32,7 @@ from typing import Any
 import cv2
 import mediapipe as mp
 import redis
+import requests
 from google import genai
 from google.genai import types
 from celery import Celery
@@ -74,6 +75,13 @@ LANDMARKS_TTL = 3600  # same as result_expires
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+
+# ---------------------------------------------------------------------------
+# ElevenLabs TTS config
+# ---------------------------------------------------------------------------
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY", "")
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "")
+ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
 
 SYSTEM_PROMPT = (
     """ You are the Biomechanical Auditor. Your ONLY purpose is to analyze movement quality within pre-defined temporal windows. Do NOT count repetitions; the timestamps provided are absolute.
@@ -478,6 +486,37 @@ def _extract_rep_midframes(
 
 
 # ---------------------------------------------------------------------------
+# ElevenLabs TTS helper
+# ---------------------------------------------------------------------------
+def _synthesize_correction_audio(text: str) -> bytes | None:
+    """Synthesize speech via ElevenLabs API; returns audio bytes or None."""
+    if not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID:
+        logger.warning("ElevenLabs not configured; skipping TTS")
+        return None
+    if not text or len(text.strip()) == 0:
+        logger.warning("Empty correction text; skipping TTS")
+        return None
+
+    try:
+        url = f"{ELEVENLABS_API_URL}/{ELEVENLABS_VOICE_ID}"
+        headers = {"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"}
+        payload = {
+            "text": text,
+            "model_id": "eleven_monolingual_v1",
+            "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
+        }
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        if response.status_code == 200:
+            logger.info("Generated audio (%.1f KB)", len(response.content) / 1024)
+            return response.content
+        logger.warning("ElevenLabs TTS failed: %s", response.text[-200:])
+        return None
+    except Exception as exc:
+        logger.exception("Failed to synthesize audio: %s", exc)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Gemini helpers (two-pass architecture)
 # ---------------------------------------------------------------------------
 _FALLBACK_RESULT: dict[str, Any] = {
@@ -792,6 +831,33 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
             "Problem landmark ranges: %d ranges, global landmarks: %s",
             len(problem_landmark_ranges), global_problem_landmarks,
         )
+
+        # Step G – synthesize correction audio via ElevenLabs and buffer in Redis
+        correction_text = analysis.get("actionable_correction", "")
+        if correction_text and task_id:
+            audio_bytes = _synthesize_correction_audio(correction_text)
+            if audio_bytes:
+                try:
+                    audio_b64 = base64.b64encode(audio_bytes).decode()
+                    audio_payload = {
+                        "audio": audio_b64,
+                        "text": correction_text,
+                    }
+                    _redis.set(
+                        f"correction_audio:{task_id}",
+                        json.dumps(audio_payload),
+                        ex=LANDMARKS_TTL,
+                    )
+                    analysis["has_audio_correction"] = True
+                    logger.info(
+                        "Stored audio correction in Redis (correction_audio:%s)",
+                        task_id,
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to buffer audio correction in Redis: %s", exc)
+                    analysis["has_audio_correction"] = False
+            else:
+                analysis["has_audio_correction"] = False
 
         return analysis
 
