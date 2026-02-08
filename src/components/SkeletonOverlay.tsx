@@ -95,7 +95,15 @@ export default function SkeletonOverlay({
 
       ctx.clearRect(0, 0, w, h);
 
-      const frame = findClosestFrame(frames, video.currentTime);
+      // The backend analysed the *downscaled* video whose duration may
+      // differ from the original video shown here.  Map the video's
+      // playback time into the landmark timeline so they stay in sync.
+      const lastT = frames[frames.length - 1]?.time_s || 0;
+      const vidDur = video.duration || lastT || 1;
+      const scale = lastT > 0 ? lastT / vidDur : 1;
+      const lookupTime = video.currentTime * scale;
+
+      const frame = findClosestFrame(frames, lookupTime);
       if (!frame) {
         rafRef.current = requestAnimationFrame(draw);
         return;

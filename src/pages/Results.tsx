@@ -215,12 +215,24 @@ export default function Results() {
       });
   }, [status, taskId]);
 
+  // ---- Time-scale factor ---------------------------------------------------
+  // The backend analysed the *downscaled* video whose duration may differ
+  // from the original video shown in the player.  All rep timestamps and
+  // landmark times are on the downscaled timeline, so we scale them.
+  const getTimeScale = (): number => {
+    const video = videoRef.current;
+    if (!video?.duration || !frames.length) return 1;
+    const lastLandmark = frames[frames.length - 1]?.time_s;
+    return lastLandmark > 0 ? video.duration / lastLandmark : 1;
+  };
+
   // ---- Seek video to rep ---------------------------------------------------
   const seekToRep = (rep: RepAnalysis) => {
     setActiveRep(rep.rep_number);
     const video = videoRef.current;
     if (video) {
-      video.currentTime = rep.timestamp_start;
+      const scale = getTimeScale();
+      video.currentTime = rep.timestamp_start * scale;
       video.play().catch(() => {});
     }
   };
@@ -231,7 +243,9 @@ export default function Results() {
     const video = videoRef.current;
 
     const onTimeUpdate = () => {
-      const t = video.currentTime;
+      // Map video time back to the downscaled timeline for rep matching
+      const scale = getTimeScale();
+      const t = video.currentTime / scale;
       const current = result.rep_analyses.find(
         (r) => t >= r.timestamp_start && t <= r.timestamp_end
       );
@@ -449,7 +463,11 @@ export default function Results() {
             {result.rep_analyses.length > 0 && videoRef.current && (
               <RepTimelineBar
                 reps={result.rep_analyses}
-                duration={videoRef.current.duration || 1}
+                duration={
+                  frames.length > 0
+                    ? frames[frames.length - 1].time_s
+                    : videoRef.current.duration || 1
+                }
                 activeRep={activeRep}
                 onSeek={seekToRep}
               />
@@ -555,7 +573,7 @@ function RepTimelineBar({
   onSeek: (rep: RepAnalysis) => void;
 }) {
   return (
-    <div className="mt-3 flex gap-1 h-3 rounded-md overflow-hidden">
+    <div className="mt-3 relative h-3 rounded-md overflow-hidden bg-border/30 w-full">
       {reps.map((rep) => {
         const widthPct =
           ((rep.timestamp_end - rep.timestamp_start) / duration) * 100;
@@ -568,10 +586,10 @@ function RepTimelineBar({
             key={rep.rep_number}
             onClick={() => onSeek(rep)}
             title={`Rep ${rep.rep_number} — ${rep.rating_1_to_10}/10`}
-            className="h-full transition-opacity rounded-sm"
+            className="absolute top-0 h-full transition-opacity rounded-sm"
             style={{
-              width: `${widthPct}%`,
-              marginLeft: rep.rep_number === 1 ? `${leftPct}%` : undefined,
+              left: `${leftPct}%`,
+              width: `${Math.max(widthPct, 1)}%`,
               backgroundColor: `hsl(${color})`,
               opacity: isActive ? 1 : 0.5,
             }}
