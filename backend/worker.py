@@ -256,32 +256,31 @@ _PASS1_SCHEMA = {
 }
 
 _PASS1_PROMPT = (
-    """You are a Pattern Recognition Engine. Your task is to extract repetition 
-timestamps from biomechanical time-series data by identifying periodic 
-oscillations in the global movement.
+    """You are a Pattern Recognition Engine. Your task is to identify exercise 
+repetitions from biomechanical time-series data. 
 
-1. IDENTIFY THE DOMINANT SIGNAL:
-   Scan the data for the joint or coordinate that shows the most consistent, 
-   large-scale rhythmic oscillation. This is your 'Anchor'.
+1. IDENTIFY THE ANCHOR SIGNAL:
+   Locate the joint or coordinate (e.g., Elbow Flexion or Hip Y) that 
+   exhibits the clearest rhythmic trend.
 
-2. REPETITION HEURISTICS (SMART DETECTION):
-   A repetition is defined by a complete 'Phase Cycle':
-   - Phase 1 (Descent): A sustained, directional trend away from the 
-     initial resting state.
-   - Phase 2 (Inflection): The moment the trend reverses (Velocity crosses zero). 
-     This must represent a meaningful change in body position, not jitter.
-   - Phase 3 (Ascent): A sustained trend returning to the original resting state.
+2. REP DETECTION LOGIC (OPEN-LOOP):
+   A repetition is triggered the moment the body transitions from a 
+   'Stable' state into a clear 'Action' phase.
+   - Start: The moment a sustained directional trend begins.
+   - Inflection: The moment the movement reaches its maximum depth 
+     (velocity hits zero or reverses).
+   - Validation: Once the Inflection point is reached, count the rep. 
 
-3. CONTEXTUAL VALIDATION:
-   - Use 'Cohesion': For a rep to be valid, the change in the Anchor signal 
-     must be mirrored by a change in the torso's vertical position (Shoulder/Hip Y).
-   - Ignore 'Micro-oscillations': Small fluctuations that do not match the 
-     overall scale of the rhythmic pattern should be discarded as noise.
+3. EDGE CASE HANDLING (VIDEO CUTOFFS):
+   Do NOT wait for the signal to return to the original 'Stable' baseline 
+   to count the rep. If the data shows a clear descent and reaches an 
+   inflection point, it is a counted rep, even if the data ends 
+   immediately after the turn.
 
-4. TEMPORAL CONTINUITY:
-   Ensure the start and end of a rep represent a return to a 'Stable' state. 
-   If the signal does not return to the baseline, it is an incomplete or 
-   transition movement, not a counted rep.
+4. COHESION FILTER:
+   Ignore fluctuations that only affect a single joint. A 'Smart' rep 
+   requires 'Cohesion'—the primary joint movement must be accompanied 
+   by a shift in the torso's global position (Shoulder/Hip Y).
 
 OUTPUT ONLY JSON: 
 { 'rep_count': int, 'rep_analyses': [{'rep_number': int, 'timestamp_start': float, 'timestamp_end': float}] }"""
