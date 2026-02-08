@@ -68,7 +68,7 @@ LANDMARKS_TTL = 3600  # same as result_expires
 # Gemini config
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-pro")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
 
 SYSTEM_PROMPT = (
 """
