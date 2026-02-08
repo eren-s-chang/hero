@@ -169,6 +169,7 @@ export default function Results() {
   const [correctionAudioUrl, setCorrectionAudioUrl] = useState<string>("");
   const audioRef = useRef<HTMLAudioElement>(null);
   const [audioPlaying, setAudioPlaying] = useState(false);
+  const [showSaitamaCoach, setShowSaitamaCoach] = useState(true);
 
   // ---- Polling loop --------------------------------------------------------
   useEffect(() => {
@@ -524,7 +525,10 @@ export default function Results() {
           autoPlay={false}
           controls={false}
           onPlay={() => setAudioPlaying(true)}
-          onEnded={() => setAudioPlaying(false)}
+          onEnded={() => {
+            setAudioPlaying(false);
+            setShowSaitamaCoach(false);
+          }}
           onPause={() => setAudioPlaying(false)}
         />
       )}
@@ -573,43 +577,48 @@ export default function Results() {
         </motion.div>
 
         {/* ── Saitama Coach with Thinking Bubble ─────────────────────────────────── */}
-        <motion.div
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5, delay: 0.1 }}
-          className="bg-card border-4 border-border rounded-md p-6 mb-8 flex items-start gap-6"
-        >
-          {/* Saitama face with thinking bubble */}
-          <div className="relative flex-shrink-0 ml-4 mt-4">
-            <motion.img
-              src={ThinkingBubble}
-              alt="Thinking bubble"
-              className="absolute -top-12 -left-8 w-36 h-32 z-10 brightness-0 invert object-contain"
-              initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
-              animate={{ opacity: 1, scale: 1, rotate: 0 }}
-              transition={{ duration: 0.4, delay: 0.3, ease: "easeOut" }}
-            />
-            <motion.img
-              src={SaitamaFace}
-              alt="Saitama Coach"
-              className="w-36 h-36 drop-shadow-2xl object-contain"
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-              transition={{ duration: 0.3, delay: 0.2 }}
-            />
-          </div>
-          
-          {/* Correction text */}
-          <div className="flex-1 pt-2">
-            <p className="font-heading text-xl tracking-wider text-primary mb-2 flex items-center gap-2">
-              <Zap className="w-5 h-5 text-primary" />
-              COACH'S TIP
-            </p>
-            <p className="font-modern text-foreground/90 leading-relaxed text-lg">
-              {result.actionable_correction}
-            </p>
-          </div>
-        </motion.div>
+        <AnimatePresence>
+          {showSaitamaCoach && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -20, opacity: 0, scale: 0.9 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="bg-card border-4 border-border rounded-md p-6 mb-8 flex items-start gap-6"
+            >
+              {/* Saitama face with thinking bubble */}
+              <div className="relative flex-shrink-0 ml-4 mt-4">
+                <motion.img
+                  src={ThinkingBubble}
+                  alt="Thinking bubble"
+                  className="absolute -top-10 -left-20 w-36 h-32 z-10 brightness-0 invert object-contain"
+                  initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
+                  animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                  transition={{ duration: 0.4, delay: 0.3, ease: "easeOut" }}
+                />
+                <motion.img
+                  src={SaitamaFace}
+                  alt="Saitama Coach"
+                  className="w-36 h-36 drop-shadow-2xl object-contain"
+                  initial={{ scale: 0.8 }}
+                  animate={{ scale: 1 }}
+                  transition={{ duration: 0.3, delay: 0.2 }}
+                />
+              </div>
+              
+              {/* Correction text */}
+              <div className="flex-1 pt-2">
+                <p className="font-heading text-xl tracking-wider text-primary mb-2 flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-primary" />
+                  COACH'S TIP
+                </p>
+                <p className="font-modern text-foreground/90 leading-relaxed text-lg">
+                  {result.actionable_correction}
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* ── Main mistakes ─────────────────────────────────────────── */}
         {result.main_mistakes.length > 0 && (
