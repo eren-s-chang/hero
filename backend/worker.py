@@ -71,168 +71,112 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 SYSTEM_PROMPT = (
-""" You are the MediaPipe Biomechanical Analysis Engine (MBAE). Your purpose is to classify three movements (Push-Up, Deadlift, Squat), count repetitions, and score movement quality with clinical precision.
-
-DATA FORMAT YOU WILL RECEIVE
-────────────────────────────
-1. Joint Angles (degrees): L_knee, R_knee, L_hip, R_hip, L_elbow, R_elbow, L_shoulder, R_shoulder, L_ankle, R_ankle, spine
-2. Landmark Coordinates (2D x,y and 3D x,y,z normalized): 3 frames per rep (start, mid, end) with LS, RS, LE, RE, LW, RW, LH, RH, LK, RK, LA, RA
-3. Reference Images: Three JPEGs per rep (start, midpoint, end positions)
+""" You are the MediaPipe Biomechanical Analysis Engine (MBAE). Your purpose is to classify only three movements (Push-Up, Deadlift, Squat), count repetitions, and score movement quality with clinical precision while still classifying sub-optimal reps and describing corrections.
 
 1. OPERATIONAL CONSTRAINTS
 Output Format: You must output ONLY valid JSON. Do not include markdown formatting, conversational text, or explanations outside the JSON structure.
 
-Strict Scope: Classify ONLY Push-Up, Deadlift, or Squat. Return "Unknown" ONLY if the movement pattern or equipment clearly indicates a different exercise.
+Input Handling: You will receive a time-series of joint angles with landmark coordinates, AND one reference image per rep.
 
-Leniency Rule: If intent matches one of the three but form is flawed, classify as that movement and list corrections. Never change classification based on form quality.
+Strict Scope: Classify ONLY these movements: Push-Up, Deadlift, Squat. If the movement does not reasonably match these, output "Unknown". Do NOT output any other exercise names.
+
+Leniency Rule: If the intent matches one of the three movements but the form is flawed, still classify as that movement and list corrections. Only return "Unknown" if the movement pattern or equipment clearly indicates a different exercise.
 
 HIERARCHY OF TRUTH:
-- Reference Images (PRIMARY): Determine exercise class via visual context (equipment, body orientation, load placement).
-- Angle Time-Series (SECONDARY): Quantify form quality, detect faults, validate classification.
-- Landmark Coordinates (TERTIARY): Assess spatial metrics (stance width, bar path, body alignment) that angles cannot capture.
 
-Signal Processing: Apply smoothing; ignore single-frame anomalies (<0.2s). Require faults to persist ≥0.2s or appear in ≥2 adjacent frames.
+Reference Images (PRIMARY): Use the reference image as the authority for Exercise Classification. Look for equipment context (barbell on back vs. in hands, body on floor, hands planted), load placement, and body orientation.
+
+Kinematic Data (SECONDARY): Use angle data only for tiebreaking and for fault detection. If image is ambiguous (cropped or unclear), use joint coupling ratios.
+
+Landmark Coordinates: Use (x,y) coordinates for spatial analysis angles cannot capture (e.g., bar path, stance width, hand placement).
+
+Signal Processing: Apply logical smoothing; do not flag faults based on single-frame anomalies. Require a fault to persist for >0.2 seconds or appear in multiple adjacent frames within a rep.
 
 2. PRE-ANALYSIS GATING
-Set "analysis_allowed" = FALSE if:
-- Critical joints invisible for >40% of rep duration
-- Landmark confidence consistently <0.5
-- Camera angle prevents assessment (extreme tilt, blur, obstructions)
+Set "analysis_allowed" to FALSE and provide a "rejection_reason" if:
 
-3. EXERCISE CLASSIFICATION (IMAGE PRIMARY)
-Classify based on visual context first; use angles to break ties only.
+Occlusion: Critical joints are invisible for >40% of the duration.
 
-Push-Up:
-  - Horizontal body near floor, hands planted at shoulder level
-  - Feet on floor, elbows flex/extend, torso stable
-  - No barbell/dumbbells
-  - Angle signature: Elbow flexion drives motion; hip angle stable; spine erect
+Confidence: Landmark visibility confidence is consistently < 0.5.
 
-Squat:
-  - Load on back (barbell), front rack (kettlebell/dumbbell), or bodyweight
-  - Feet planted shoulder-width, hips descend below standing height
-  - Knees and hips flex together, moderate forward lean
-  - Angle signature: Knee and hip flex in tandem (~1:1 ratio at deep position); knee angle reaches 80–110° at bottom
+Bad Angle: The camera angle prevents valid assessment (e.g., extreme blur, camera facing ceiling).
 
-Deadlift:
-  - Load held in hands (barbell/dumbbells), starts near floor or mid-shin
-  - Hips higher than squat at start; torso hinged forward
-  - Lifting via hip extension first, knees extend later
-  - Angle signature: Hip extension dominates; knee angle stays 100–130° at start; large change in spine angle during pull
+3. EXERCISE CLASSIFICATION LOGIC (IMAGE PRIORITY)
+Step 1: Visual Classification (Highest Priority)
 
-4. BODY PROPORTION ESTIMATION
-─────────────────────────────
-From the images, estimate lifter's relative build:
-- If tall (appears >6'): Squat depth expectations are deeper (knee 70–95°)
-- If short (<5'8"): Squat depth expectations are shallower (knee 85–105°)
-- Apply ±5° variance to depth/lean/angle thresholds based on proportions
+Push-Up: Body is horizontal near the floor; hands on floor under/near shoulders; feet on floor; no barbell. Elbows flex/extend with torso staying roughly rigid.
 
-Example: "Person appears 6'2" (tall build). Knee angle 92° at depth is acceptable for their proportions."
+Squat: Load placed on upper back or front rack OR bodyweight with feet planted; hips descend below standing height; torso inclines forward moderately; knees and hips flex together.
 
-5. VISUAL-ANGLE CONVERGENCE RULE (CRITICAL)
-────────────────────────────────────────────
-To flag a fault, you must have BOTH visual AND angle evidence:
-✓ VALID: Image shows knees caving inward AND inter-knee/ankle ratio < 0.75
-✗ INVALID: Angles show ratio 0.72, but image clearly shows vertical knee tracking
+Deadlift: Load held in hands (barbell/dumbbells); starts/returns near floor or mid-shin; torso hinged forward; shins relatively more vertical than in squat.
 
-If visual contradicts angles:
-  1. Describe what you see in the image
-  2. Note the angle reading
-  3. Apply the VISUAL assessment (images override angles for safety)
-  4. Explain why (likely camera artifact, body proportions, etc.)
+Step 2: Kinematic Tiebreaker (Only if image is ambiguous)
 
-Deduct points ONLY when visual + angles BOTH confirm the fault (confidence ≥ 0.75).
+Squat Pattern: Knee Flexion / Hip Flexion ratio ~ 1:1, pelvis drops vertically with knees traveling forward.
 
-6. REP PHASE ANALYSIS
-─────────────────────
-Assess movement quality in distinct phases:
+Deadlift Pattern: Hip Flexion >> Knee Flexion (hip-dominant), torso angle changes more than knee angle, bar path stays close to shins.
 
-SQUAT:
-  Phase 1 (Descent, 0–40%): Assess knee-hip coupling, torso stability, even weight distribution
-  Phase 2 (Bottom, 40–60%): Assess depth, knee valgus, core stability, hip control
-  Phase 3 (Ascent, 60–100%): Assess drive symmetry, lockout quality, no asymmetric weight shift
+Push-Up Pattern: Elbow flexion/extension with relatively stable hip angle; shoulder and elbow angles drive motion while ankles stay fixed.
 
-DEADLIFT:
-  Phase 1 (Positioning, 0–20%): Hips at correct height, spine angle 25–35°, neutral lumbar
-  Phase 2 (Pull, 20–80%): Bar path close to body, proper hip/knee sequencing, lumbar stays neutral
-  Phase 3 (Lockout, 80–100%): Complete hip extension (hips fully forward), vertical torso, no shoulder shrug
+4. REPETITION COUNTING (FINITE STATE MACHINE)
+Use a 3-State Logic with Hysteresis and identify the dominant joint signal for the classified movement. A rep can be suboptimal and still counted if the motion is clearly cyclical and returns toward the start position.
 
-PUSH-UP:
-  Phase 1 (Descent, 0–50%): Elbows track parallel, core stable (no sag), spine neutral
-  Phase 2 (Bottom, 50–50%): Full depth (elbows 80–90°), chest near floor, hips level
-  Phase 3 (Ascent, 50–100%): Even elbow drive, complete lockout, no shoulder shrug
+State A (Start): Joint angle at resting threshold.
 
-Score each phase separately (0–3.3/10 each), then average for rep rating.
+State B (Inflection): Joint angle crosses effort threshold (clear ROM change in the primary mover joint).
 
-7. SIMPLIFIED REP QUALITY RUBRIC (5 CORE FAULTS PER EXERCISE)
-══════════════════════════════════════════════════════════════
-Start each rep at 10/10. Deduct points ONLY when visual + angles both confirm:
+State C (Return): Transition B -> A. Count a rep if ROM change >= 35° and duration >= 0.35s, and the joint returns within 15° of the start angle.
 
-A. SQUAT FAULTS
-  1. Insufficient Depth (−3.0): Hips clearly above knees in images; Min(L_knee, R_knee) > 95°
-  2. Knee Valgus (−3.0): Knees visibly cave inward; inter-knee/ankle ratio < 0.75
-  3. Excessive Forward Lean (−2.0): Torso >50° from vertical in bottom position; spine angle > 55°
-  4. Loss of Core Stability (−2.0): Hips shift side-to-side visibly; lateral hip drift > 0.1 units
-  5. Asymmetry (−1.5): One side visibly weaker in images; |L_knee − R_knee| > 15° during descent
+Push-Up Rep Rule: Use elbow flexion as the primary signal (average L/R). Require elbow ROM >= 35° and a visible torso descent (shoulder and hip Y decrease together by >= 0.02). Count even if depth is partial; mark Partial ROM in scoring.
 
-B. DEADLIFT FAULTS
-  1. Lumbar Rounding (−3.0): Lower back visibly curved in images; spine angle < 25° during pull
-  2. Hips Too Low at Start (−2.5): Resembles squat position; (L_knee + R_knee)/2 < 95° at start
-  3. Incomplete Lockout (−2.0): Not fully upright at top; final hip extension < 160° or torso not vertical
-  4. Bar Path Drift (−2.0): Bar visibly moves away from body; horizontal distance from mid-hip > 0.08
-  5. Asymmetric Pull (−1.5): One side clearly stronger in images; |L_knee − R_knee| > 12° during pull
+Squat Rep Rule: Use knee + hip flexion (average L/R). Require knee or hip ROM >= 35° and pelvis (hip Y) drops by >= 0.03. Count even if depth is insufficient; mark Insufficient Depth in scoring.
 
-C. PUSH-UP FAULTS
-  1. Sagging Core (-3.0): Hips drop towards floor; Spine-Hip-Knee angle > 195° (Hyperextension) OR < 160° (if calculating interior angle).
-  2. Incomplete Depth (-3.0): Upper arm fails to reach parallel; Min(L_elbow, R_elbow) > 95° at bottom.
-  3. Extreme Elbow Flare (-2.0): Elbows point outward 90° from torso (T-shape); Shoulder-Hip-Elbow angle > 75° (Requires Top/Front view).
-  4. Piking (-2.0): Hips shoot up; Spine-Hip-Knee angle < 160° (Flexion).
-  5. Incomplete Lockout (-1.5): Elbows stay bent at top; Max(L_elbow, R_elbow) < 165° at start/end.
+5. FORM SCORING & FAULT THRESHOLDS (ONLY FOR THE CLASSIFIED EXERCISE)
+Start at a Score of 10. Deduct points for deviations. Be lenient to imperfect form: detect and report faults, but do not change the exercise classification unless the movement clearly belongs to a different exercise.
 
-8. CONFIDENCE-BASED SCORING
-──────────────────────────
-Only apply deduction if confidence ≥ 0.9.
-For each fault, output:
-  - fault: name of the fault
-  - confidence: 0–1 (how certain you are)
-  - visual_evidence: what you see in the image ("knees caving inward visually", etc.)
-  - angle_evidence: which angles support this ("inter-knee ratio 0.72", etc.)
-  - deduction: only apply if confidence ≥ 0.9.
+A. SQUAT
+Critical (-3.0): Valgus (Front view). Inter-Knee Dist / Inter-Ankle Dist < 0.8.
 
-If confidence < 0.9, include the fault for user awareness but do NOT deduct points.
+Major (-1.5): Insufficient Depth (Knee Flexion < 90° OR Hip Y > Knee Y at bottom).
 
-9. BASELINE QUALITY ASSESSMENT
-──────────────────────────────
-After scoring Rep 1:
-  - If Rep 1 ≥ 8/10: "Rep 1 shows excellent form. This is the standard for this session."
-  - If Rep 1 < 6/10: "Form breaks down from the start. Focus initial position corrections."
-  - Use this context to interpret fatigue or technical breakdown in later reps.
+Major (-1.0): Excessive Forward Lean (Torso angle < 35° relative to floor at bottom).
 
-10. REQUIRED OUTPUT SCHEMA
-───────────────────────────
-{ 
-  "analysis_allowed": boolean, 
-  "rejection_reason": string,
-  "exercise_detected": enum["Push-Up", "Squat", "Deadlift", "Unknown"],
-  "rep_count": integer,
-  "form_rating_1_to_10": integer (1–10 scale; average of all rep ratings),
-  "main_mistakes": array[string] (list of distinct fault types detected across all reps),
-  "rep_analyses": array[
-    {
-      "rep_number": integer,
-      "timestamp_start": number (seconds),
-      "timestamp_end": number (seconds),
-      "rating_1_to_10": integer,
-      "mistakes": array[object] (faults in THIS rep only, each with confidence, evidence, deduction),
-      "problem_joints": array[string] (which joints had angle deviations)
-    }
-  ],
-  "problem_joints": array[string] (aggregate across all reps),
-  "visual_description": string (2–3 sentences describing what you see in images),
-  "actionable_correction": string (single, highest-impact coaching cue)
-}
+Major (-1.0): Heels Lift (Ankle angle < 75° OR ankle Y rises > 0.02 during descent).
 
-"""
+Major (-1.0): Asymmetrical Load Shift (L/R knee flexion differs > 15° at bottom).
+
+Minor (-0.5): Butt Wink (Lumbar angle posterior shift > 10°).
+
+B. DEADLIFT
+Critical (-3.0): Lumbar Rounding (Thoracic vector drops < 30° relative to floor during pull).
+
+Major (-1.5): Hips Rise Early (Hip extension occurs without knee extension for >0.2s at start).
+
+Major (-1.0): "Squatting the Pull" (Knee angle < 100° at start, hips too low).
+
+Minor (-0.5): Soft Lockout (Hip extension < 170° at top).
+
+C. PUSH-UP
+Critical (-2.5): Sagging Hips (Hip angle drops > 20° relative to shoulder-ankle line).
+
+Major (-1.5): Partial ROM (Elbow flexion peak < 80°).
+
+Major (-1.0): Elbow Flare (Elbow-Torso angle > 75°).
+
+Major (-1.0): Pike/Hips High (Hip angle rises > 20° above shoulder-ankle line).
+
+Major (-1.0): Uneven Lockout (L/R elbow extension difference > 15° at top).
+
+Minor (-0.5): Uneven Depth (L/R elbow flexion difference > 15° at bottom).
+
+Minor (-0.5): Hands Too Wide (Wrist X distance > 1.5x Shoulder X distance).
+
+Minor (-0.5): Head/Neck Misalignment (Neck angle deviates > 20° from torso line).
+
+6. REQUIRED OUTPUT SCHEMA
+You must strictly adhere to this JSON structure:
+
+{ "type": "object", "properties": { "analysis_allowed": { "type": "boolean", "description": "True if landmarks are visible and camera angle allows valid assessment." }, "rejection_reason": { "type": "string", "description": "If analysis_allowed is false, state why. Otherwise empty string." }, "exercise_detected": { "type": "string", "enum": ["Push-Up", "Squat", "Deadlift", "Unknown"], "description": "Identified primarily via image context." }, "rep_count": { "type": "integer", "description": "Total completed reps passing the FSM check." }, "form_rating_1_to_10": { "type": "integer", "description": "Holistic score (1-10). Start at 10, subtract deductions." }, "main_mistakes": { "type": "array", "items": {"type": "string"}, "description": "List of distinct faults detected via biomechanical angle analysis." }, "rep_analyses": { "type": "array", "items": { "type": "object", "properties": { "rep_number": {"type": "integer"}, "timestamp_start": {"type": "number"}, "timestamp_end": {"type": "number"}, "rating_1_to_10": {"type": "integer"}, "mistakes": { "type": "array", "items": {"type": "string"} }, "problem_joints": { "type": "array", "items": {"type": "string"} } }, "required": ["rep_number", "timestamp_start", "timestamp_end", "rating_1_to_10", "mistakes", "problem_joints"] } }, "problem_joints": { "type": "array", "items": {"type": "string"}, "description": "Aggregate list of joints where angles deviated from the ideal model." }, "visual_description": { "type": "string", "description": "If reference images were provided, a 2-3 sentence description of what is visually observed across the images: person's body position, equipment, environment, stance, and any visible form issues. Empty string if no images." }, "actionable_correction": { "type": "string", "description": "A single, high-impact coaching cue based on the most frequent fault." } }, "required": [ "analysis_allowed", "rejection_reason", "exercise_detected", "rep_count", "form_rating_1_to_10", "main_mistakes", "rep_analyses", "problem_joints", "visual_description", "actionable_correction" ] } """
 )
 
 
@@ -259,17 +203,7 @@ RESPONSE_JSON_SCHEMA = {
                     "rating_1_to_10": {"type": "integer"},
                     "mistakes": {
                         "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "fault": {"type": "string"},
-                                "confidence": {"type": "number"},
-                                "visual_evidence": {"type": "string"},
-                                "angle_evidence": {"type": "string"},
-                                "deduction": {"type": "number"},
-                            },
-                            "required": ["fault", "confidence", "visual_evidence", "angle_evidence", "deduction"],
-                        },
+                        "items": {"type": "string"},
                     },
                     "problem_joints": {
                         "type": "array",
@@ -327,10 +261,14 @@ _PASS1_PROMPT = (
     "Use a 3-State Finite State Machine with Hysteresis:\n"
     "- State A (Start): Joint angle at resting threshold.\n"
     "- State B (Inflection): Joint angle crosses effort threshold "
-    "(significant ROM change in the primary mover joints — knees, hips, "
-    "elbows, or shoulders).\n"
-    "- State C (Return): Transition B → A. Count a rep if ROM change > 45° "
-    "and duration > 0.4s.\n\n"
+    "(significant ROM change in the primary mover joints — elbows for push-up, "
+    "knees/hips for squat; otherwise pick the strongest periodic signal).\n"
+    "- State C (Return): Transition B → A. Count a rep if ROM change >= 35° "
+    "and duration >= 0.35s, and the joint returns within 15° of the start.\n\n"
+    "Push-Up rep cue: elbow flexion/extension is primary; require visible torso "
+    "descent (shoulder + hip Y decrease together). Count even if depth is partial.\n"
+    "Squat rep cue: knee + hip flexion are primary; require pelvis (hip Y) drop. "
+    "Count even if depth is shallow.\n\n"
     "Apply logical smoothing: ignore single-frame anomalies (<0.2s).\n\n"
     "Output ONLY:\n"
     '- \"rep_count\": total completed reps\n'
@@ -380,9 +318,6 @@ _COORD_LANDMARKS: list[tuple[int, str]] = [
     (PoseLandmark.LEFT_KNEE, "LK"),     (PoseLandmark.RIGHT_KNEE, "RK"),
     (PoseLandmark.LEFT_ANKLE, "LA"),    (PoseLandmark.RIGHT_ANKLE, "RA"),
 ]
-
-# Set of coordinate landmark names for filtering
-_COORD_LANDMARK_NAMES: set[str] = {name for _, name in _COORD_LANDMARKS}
 
 
 def _angle_between(a, vertex, b) -> float:
@@ -507,85 +442,45 @@ def _process_video(
     return header + "\n" + "\n".join(angle_lines), raw_frames
 
 
-def _extract_rep_frames_with_landmarks(
+def _extract_rep_midframes(
     video_path: str,
     rep_analyses: list[dict],
-    raw_frames: list[dict],
-) -> list[dict]:
-    """Extract 3 frames (start, mid, end) per rep with 2D and 3D landmarks.
+) -> list[tuple[float, bytes]]:
+    """For each rep, extract the video frame at the temporal midpoint.
 
-    Returns list of dicts:
-    [
-      {
-        "rep_number": int,
-        "frames": {
-          "start": {"t": float, "jpeg": bytes, "landmarks_2d": dict, "landmarks_3d": dict},
-          "mid": {...},
-          "end": {...}
-        }
-      }
-    ]
+    Returns list of (mid_timestamp_s, jpeg_bytes) tuples — one per rep.
     """
     if not rep_analyses:
         return []
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        logger.warning("Cannot re-open video for rep frame extraction")
+        logger.warning("Cannot re-open video for mid-rep frame extraction")
         return []
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    results: list[dict] = []
-
+    results: list[tuple[float, bytes]] = []
     try:
         for rep in sorted(rep_analyses, key=lambda r: r.get("rep_number", 0)):
             t_start = rep.get("timestamp_start", 0)
             t_end = rep.get("timestamp_end", 0)
-            rep_num = rep.get("rep_number", 0)
+            mid_t = (t_start + t_end) / 2.0
+            frame_idx = round(mid_t * fps)
 
-            frames_data = {"rep_number": rep_num, "frames": {}}
-
-            # Extract 3 frames: start, mid, end
-            for frame_type, t in [("start", t_start), ("mid", (t_start + t_end) / 2), ("end", t_end)]:
-                frame_idx = round(t * fps)
-                cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-                ret, bgr = cap.read()
-
-                if ret:
-                    # Extract JPEG
-                    ok, buf = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, 80])
-                    if ok:
-                        # Find closest landmark frame in raw_frames
-                        closest_frame = min(raw_frames, key=lambda f: abs(f["time_s"] - t))
-                        lm_data = closest_frame.get("landmarks", [])
-
-                        # Build 2D and 3D landmark dicts (only key landmarks)
-                        landmarks_2d = {}
-                        landmarks_3d = {}
-                        for lm in lm_data:
-                            name = lm.get("name", "")
-                            if name in _COORD_LANDMARK_NAMES:
-                                landmarks_2d[name] = [round(lm["x"], 4), round(lm["y"], 4)]
-                                landmarks_3d[name] = [round(lm["x"], 4), round(lm["y"], 4), round(lm["z"], 4)]
-
-                        frames_data["frames"][frame_type] = {
-                            "t": round(t, 3),
-                            "jpeg": buf.tobytes(),
-                            "landmarks_2d": landmarks_2d,
-                            "landmarks_3d": landmarks_3d,
-                        }
-
-            if frames_data["frames"]:
-                results.append(frames_data)
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, bgr = cap.read()
+            if ret:
+                ok, buf = cv2.imencode(
+                    ".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, 80],
+                )
+                if ok:
+                    results.append((round(mid_t, 3), buf.tobytes()))
     finally:
         cap.release()
 
     logger.info(
-        "Extracted %d reps with 3 frames each (start, mid, end); total %.1f KB JPEG",
-        len(results), sum(
-            sum(len(f.get("jpeg", b"")) for f in r["frames"].values())
-            for r in results
-        ) / 1024,
+        "Extracted %d mid-rep JPEGs (%.1f KB total)",
+        len(results), sum(len(b) for _, b in results) / 1024,
     )
     return results
 
@@ -617,24 +512,13 @@ def _gemini_call(
     effective_schema = schema or RESPONSE_JSON_SCHEMA
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-    # Temperature tuning by pass
-    if tag == "Pass 1":
-        temperature = 0.2
-        max_tokens = 8192
-    elif tag == "Pass 2":
-        temperature = 0.3
-        max_tokens = 12000
-    else:
-        temperature = 0.2
-        max_tokens = 8192
-
     try:
         response = client.models.generate_content(
             model=GEMINI_MODEL,
             contents=contents,
             config=types.GenerateContentConfig(
-                temperature=temperature,
-                max_output_tokens=max_tokens,
+                temperature=0.2,
+                max_output_tokens=8192,
                 response_mime_type="application/json",
                 response_schema=effective_schema,
             ),
@@ -648,8 +532,8 @@ def _gemini_call(
             model=GEMINI_MODEL,
             contents=contents,
             config={
-                "temperature": temperature,
-                "max_output_tokens": max_tokens,
+                "temperature": 0.2,
+                "max_output_tokens": 8192,
                 "response_mime_type": "application/json",
             },
         )
@@ -693,39 +577,12 @@ def _gemini_pass1(angle_text: str) -> dict[str, Any]:
 
 def _gemini_pass2(
     angle_text: str,
-    rep_frames_with_landmarks: list[dict],
+    rep_jpegs: list[tuple[float, bytes]],
     pass1_rep_analyses: list[dict],
 ) -> dict[str, Any]:
     """Pass 2 — PRIMARY analysis.  Classify exercise from images, score
     form from angles, detect faults.  Uses rep timestamps from Pass 1 as
     structural context only."""
-
-    # Build landmark context from rep frames
-    landmark_context = ""
-    if rep_frames_with_landmarks:
-        for rep_data in rep_frames_with_landmarks:
-            rep_num = rep_data["rep_number"]
-            landmark_context += f"\nRep {rep_num} Landmark Data (2D x,y normalized | 3D x,y,z normalized):\n"
-            for frame_type in ["start", "mid", "end"]:
-                if frame_type in rep_data["frames"]:
-                    frame = rep_data["frames"][frame_type]
-                    t = frame["t"]
-                    lm2d = frame["landmarks_2d"]
-                    lm3d = frame["landmarks_3d"]
-
-                    landmark_context += f"  {frame_type.upper()} ({t}s):\n"
-                    for name in sorted(lm2d.keys()):
-                        x2, y2 = lm2d[name]
-                        x3, y3, z3 = lm3d[name]
-                        landmark_context += f"    {name}: 2D({x2:.3f},{y2:.3f}) 3D({x3:.3f},{y3:.3f},{z3:.3f})\n"
-
-                    # Add computed metrics for key landmarks
-                    if "LA" in lm2d and "RA" in lm2d:
-                        stance_width = abs(lm2d["LA"][0] - lm2d["RA"][0])
-                        landmark_context += f"    Stance width: {stance_width:.3f}\n"
-                    if "LH" in lm2d and "RH" in lm2d:
-                        hip_width = abs(lm2d["LH"][0] - lm2d["RH"][0])
-                        landmark_context += f"    Hip width: {hip_width:.3f}\n"
 
     # Build rep-boundary context from Pass 1
     rep_context = ""
@@ -741,12 +598,12 @@ def _gemini_pass2(
             + "\n".join(rep_lines) + "\n\n"
         )
 
-    if rep_frames_with_landmarks:
-        # ── Multimodal: images + angles + landmarks (primary path) ──
+    if rep_jpegs:
+        # ── Multimodal: images + angles (primary path) ──
         prompt = (
             f"{SYSTEM_PROMPT}\n\n"
-            f"You have {len(rep_frames_with_landmarks)} reps with 3 frames each "
-            "(start, mid, end positions), each with 2D and 3D landmark coordinates.\n\n"
+            f"You have {len(rep_jpegs)} mid-rep reference images (one per rep, "
+            "captured at the temporal midpoint of each repetition).\n\n"
             "CRITICAL — EXERCISE CLASSIFICATION:\n"
             "Your #1 job is to look at the images and determine the exercise.\n"
             "Look for: equipment (barbell, dumbbells, bench, rack, cables, "
@@ -759,37 +616,28 @@ def _gemini_pass2(
             "visible form issues.\n"
             "2. Classify the exercise based PRIMARILY on what you SEE.\n"
             "3. Use the rep boundaries below to structure your per-rep analysis.\n"
-            "4. Use the angle data and landmark coordinates to score form quality and detect biomechanical "
-            "faults for each rep.\n"
-            "5. For each fault, output confidence, visual_evidence, and angle_evidence to validate your assessment.\n\n"
+            "4. Use the angle data to score form quality and detect biomechanical "
+            "faults for each rep.\n\n"
             f"{rep_context}"
-            f"{landmark_context}\n"
-            "Joint angles (degrees) time-series:\n\n"
+            "Joint angles (degrees) and landmark coordinates:\n\n"
             f"{angle_text}"
         )
 
         contents: list = []
-        for rep_data in rep_frames_with_landmarks:
-            for frame_type in ["start", "mid", "end"]:
-                if frame_type in rep_data["frames"]:
-                    jpeg = rep_data["frames"][frame_type]["jpeg"]
-                    contents.append(types.Part.from_bytes(data=jpeg, mime_type="image/jpeg"))
+        for _ts, jpeg in rep_jpegs:
+            contents.append(types.Part.from_bytes(data=jpeg, mime_type="image/jpeg"))
         contents.append(prompt)
 
         logger.info(
             "[Pass 2] Multimodal primary analysis: text + %d images (%.1f KB)",
-            len(contents) - 1, sum(
-                sum(len(f.get("jpeg", b"")) for f in r["frames"].values())
-                for r in rep_frames_with_landmarks
-            ) / 1024,
+            len(rep_jpegs), sum(len(b) for _, b in rep_jpegs) / 1024,
         )
     else:
         # ── Text-only fallback (no rep images available) ──
         prompt = (
             f"{SYSTEM_PROMPT}\n\n"
             f"{rep_context}"
-            f"{landmark_context}\n"
-            "Here are the joint angles (degrees) time-series "
+            "Here are the joint angles (degrees) and landmark coordinates "
             "extracted from a workout video:\n\n"
             f"{angle_text}"
         )
@@ -865,72 +713,25 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
         # Step C – Pass 1: text-only Gemini call to get rep timestamps
         pass1 = _gemini_pass1(angle_text)
 
-        # Step D – extract 3 frames (start, mid, end) per rep with 2D/3D landmarks using Pass 1's rep timestamps
+        # Step D – extract mid-rep frames using Pass 1's rep timestamps
         rep_analyses = pass1.get("rep_analyses", [])
-        rep_frames_with_landmarks = _extract_rep_frames_with_landmarks(str(mp4_path), rep_analyses, raw_frames)
+        rep_jpegs = _extract_rep_midframes(str(mp4_path), rep_analyses)
         logger.info(
-            "Extracted %d reps with 3 frames each (start, mid, end)",
-            len(rep_frames_with_landmarks),
+            "Extracted %d mid-rep frames for %d reps",
+            len(rep_jpegs), len(rep_analyses),
         )
 
         # Step E – Pass 2: primary analysis (classification + scoring + faults)
-        analysis = _gemini_pass2(angle_text, rep_frames_with_landmarks, rep_analyses)
-        
-        # Collect frame timestamps for frontend
-        rep_frame_timestamps: list[float] = []
-        for rep_data in rep_frames_with_landmarks:
-            for frame_type in ["start", "mid", "end"]:
-                if frame_type in rep_data["frames"]:
-                    rep_frame_timestamps.append(rep_data["frames"][frame_type]["t"])
-        analysis["rep_frame_timestamps"] = rep_frame_timestamps
+        analysis = _gemini_pass2(angle_text, rep_jpegs, rep_analyses)
+        analysis["rep_frame_timestamps"] = [t for t, _ in rep_jpegs]
 
-        # Buffer per-rep frames with landmarks in Redis for frontend display
-        # Recalculate per-rep and overall scores from LLM deductions to keep scoring deterministic
-        reps = analysis.get("rep_analyses", []) or []
-        if isinstance(reps, list) and reps:
-            for rep in reps:
-                if not isinstance(rep, dict):
-                    continue
-                mistakes = rep.get("mistakes", []) or []
-                total_deduction = 0.0
-                for m in mistakes:
-                    if not isinstance(m, dict):
-                        continue
-                    conf = m.get("confidence")
-                    # Apply deduction only when confidence is missing or >= 0.50
-                    if conf is not None and conf < 0.9:
-                        continue
-                    try:
-                        ded = float(m.get("deduction", 0) or 0)
-                    except (TypeError, ValueError):
-                        ded = 0.0
-                    if ded > 0:
-                        total_deduction += ded
-
-                rating = max(1, min(10, int(round(10 - total_deduction))))
-                rep["rating_1_to_10"] = rating
-
-            # Overall form rating = average of per-rep ratings
-            ratings = [r.get("rating_1_to_10", 0) for r in reps if isinstance(r, dict)]
-            if ratings:
-                avg_rating = sum(ratings) / len(ratings)
-                analysis["form_rating_1_to_10"] = max(1, min(10, int(round(avg_rating))))
-                analysis["rep_count"] = len(ratings)
-        if task_id and rep_frames_with_landmarks:
+        # Buffer per-rep frame JPEGs in Redis for frontend display
+        if task_id and rep_jpegs:
             try:
-                rep_payload = []
-                for rep_data in rep_frames_with_landmarks:
-                    rep_entry = {"rep_number": rep_data["rep_number"], "frames": {}}
-                    for frame_type in ["start", "mid", "end"]:
-                        if frame_type in rep_data["frames"]:
-                            frame = rep_data["frames"][frame_type]
-                            rep_entry["frames"][frame_type] = {
-                                "t": frame["t"],
-                                "b64": base64.b64encode(frame["jpeg"]).decode(),
-                                "landmarks_2d": frame["landmarks_2d"],
-                                "landmarks_3d": frame["landmarks_3d"],
-                            }
-                    rep_payload.append(rep_entry)
+                rep_payload = [
+                    {"t": t, "b64": base64.b64encode(jpg).decode()}
+                    for t, jpg in rep_jpegs
+                ]
                 _redis.set(
                     f"rep_frames:{task_id}",
                     json.dumps(rep_payload),
