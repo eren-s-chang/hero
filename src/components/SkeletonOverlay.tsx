@@ -128,8 +128,10 @@ export default function SkeletonOverlay({
       const lmMap = new Map(frame.landmarks.map((lm) => [lm.name, lm]));
 
       // Helper: is this connection (edge) part of a problem area?
+      // Highlight an edge red if EITHER endpoint is a problem landmark
+      // so the red area radiates visibly from affected joints.
       const isEdgeProblem = (a: string, b: string) =>
-        problemSet.has(a) && problemSet.has(b);
+        problemSet.has(a) || problemSet.has(b);
 
       // ── Pass 1: Dark outline for contrast against any background ──
       ctx.save();
