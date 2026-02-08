@@ -584,7 +584,7 @@ export default function Results() {
             <motion.img
               src={ThinkingBubble}
               alt="Thinking bubble"
-              className="absolute -top-8 -left-4 w-24 h-20 z-10"
+              className="absolute -top-8 -left-4 w-24 h-20 z-10 brightness-0 invert"
               initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
               animate={{ opacity: 1, scale: 1, rotate: 0 }}
               transition={{ duration: 0.4, delay: 0.3, ease: "easeOut" }}
