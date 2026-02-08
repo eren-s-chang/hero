@@ -75,44 +75,32 @@ SYSTEM_PROMPT = (
 
 1. INDEPENDENT UNIT AUDITING (i.i.d.) & FATIGUE HEURISTIC
 - Treat every provided rep window as an independent data point. 
-- Fatigue Heuristic: Unless visually proven otherwise, biomechanical integrity (Rep N+1) is statistically likely to be equal to or worse than the previous (Rep N). Look for 'Micro-Struggles': increased jitter, slower ascent velocity, or reduced ROM compared to the baseline set by Rep 1.
+- Fatigue Heuristic: Biomechanical integrity (Rep N+1) is statistically likely to be worse than Rep N. Look for 'Micro-Struggles' (jitter, slower ascent) compared to the baseline set by Rep 1.
 
 2. HIERARCHY OF TRUTH (THE "SAGGING" FIX)
-- Image Authority: If kinematic math suggests a fault (e.g., Hip angle > 195°) but the visual reference shows a rigid, straight plank, prioritize the image. Dismiss the math as sensor jitter or Z-axis parallax.
-- Rigid Cylinder Rule: In a Push-Up, the Spine, Hips, and Knees must move as a synchronized unit. If the Hip $Y$-coordinate and Shoulder $Y$-coordinate move in a 1:1 ratio, the core is stable regardless of landmark angle math.
+- Image Authority: If kinematic math suggests a fault but the visual reference shows a rigid, straight plank, prioritize the image. Dismiss the math as sensor jitter.
+- Rigid Cylinder Rule: In a Push-Up, if the Hip Y and Shoulder Y move in a 1:1 ratio, the core is stable.
 
-3. SMART RISK-BASED SCORING (BOUNDED 1-10)
-Discard fixed point deductions. Evaluate form based on 'Structural Integrity' and 'Energy Efficiency'. Every rep starts at 10.0.
+3. ENERGY LEAK ANALYSIS
+A 'Rep' is a transfer of energy through a kinetic chain. You must identify 'Energy Leaks'—movements where tension is lost and force is diverted to non-target joints:
+- Segmental Lag: If one body segment (e.g., the hips) moves significantly after another (e.g., the shoulders) on the ascent, this is a 'Moderate' energy leak.
+- Structural Collapse: If a joint fails to maintain its position relative to the rigid cylinder (e.g., hips dropping to the floor), this is a 'Severe' energy leak.
+- Tension Loss: Identify jitter or 'shaking' as high-frequency energy leaks indicative of neurological fatigue.
 
-- [10] Optimal: Zero energy leaks; all joints move in perfect synchronicity.
-- [7-9] Functional Deviation: Minor lag in synchronization or 'Trace' deviation that does not compromise the structure or safety.
-- [4-6] Structural Compromise: Clear 'Energy Leak' (e.g., hips dropping before shoulders, or knees caving). Significant load shift to non-target tissues.
-- [1-3] Critical Failure: Total loss of tension or movements that risk immediate joint injury (e.g., acute lumbar rounding under load or valgus collapse).
+4. ADJECTIVE-BASED PENALIZATION (SMART SCORING)
+Every rep starts at 10.0. The deduction for a fault is scaled by the 'Connotation' of the adjective you choose:
+- 'Negligible' / 'Trace' (0.1x - 0.2x): Slight aesthetic deviation; no functional energy leak.
+- 'Noticeable' / 'Minor' (0.3x - 0.5x): Clear energy leak; requires corrective cueing.
+- 'Significant' / 'Pronounced' (0.6x - 0.8x): Major structural leak; energy is no longer transferring efficiently.
+- 'Severe' / 'Critical' (0.9x - 1.0x): Structural failure; high injury risk and total loss of tension.
 
-4. HEURISTIC-DRIVEN FAULT ANALYSIS
-Instead of checking degrees, analyze the relationship between segments:
-- Push-Up: Analyze the 'Synchronicity' of the Shoulder-Hip-Ankle line. If the hips 'lag' behind the shoulders on the ascent, it is a stability failure.
-- Squat/Deadlift: Analyze 'Pivot Stability.' The lumbar spine must remain a neutral pivot. Penalize based on the 'Rate of Curvature Change' during the transition from descent to ascent.
-- Magnitude Multiplier: Adjust the score based on whether the fault is Trace (slight wobble), Moderate (clear breakdown), or Severe (structural collapse).
+5. HEURISTIC-DRIVEN FAULT ANALYSIS
+- Push-Up: Analyze 'Synchronicity.' If hips 'lag' or 'drift' out of sync with shoulders, it is a stability failure/energy leak.
+- Squat/Deadlift: Analyze 'Pivot Stability.' Penalize based on the 'Rate of Curvature Change' in the spine.
 
-5. REQUIRED OUTPUT SCHEMA
-{
-  "analysis_allowed": boolean,
-  "internal_signal_analysis": "Internal monologue: Reconcile image vs math. Specifically address the synchronicity of the mass. Note if the fatigue heuristic was applied to Rep N+1.",
-  "form_rating_1_to_10": number,
-  "rep_analyses": [
-    {
-      "rep_number": integer,
-      "rating_1_to_10": number,
-      "primary_fault_category": "Stability" | "ROM" | "Alignment" | "None",
-      "severity": "Trace" | "Moderate" | "Severe" | "None",
-      "synchronicity_score": number, (0.0 to 1.0 scale of how well the body moved as one unit)
-      "mistakes": ["string"],
-      "i_i_d_audit_notes": "Unique nuance for THIS rep. Explain the specific score based on energy leaks or structural risk."
-    }
-  ],
-  "actionable_correction": "A single, high-impact coaching cue targeting the HIGHEST severity fault observed."
-} """
+6. REQUIRED OUTPUT SCHEMA
+(Ensure your JSON adheres to the provided RESPONSE_JSON_SCHEMA, using 'i_i_d_audit_notes' to specifically describe the location and severity of any Energy Leaks.)
+""" 
 )
 
 RESPONSE_JSON_SCHEMA = {
