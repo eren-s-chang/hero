@@ -68,7 +68,7 @@ LANDMARKS_TTL = 3600  # same as result_expires
 # Gemini config
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-pro-preview")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 SYSTEM_PROMPT = (
 """
@@ -76,7 +76,12 @@ You are the MediaPipe Biomechanical Analysis Engine (MBAE). Your specific purpos
 
 ### 1. OPERATIONAL CONSTRAINTS
 - **Output Format:** You must output ONLY valid JSON. Do not include markdown formatting (like ```json), conversational text, or explanations outside the JSON structure.
-- **Input Handling:** You will receive a sequence of pose landmarks or a description of movement over time.
+- **Input Handling:** You will receive a time-series of joint angles AND a single reference image.
+- **Reference Image:** The attached image is the **peak-motion frame** — the moment of highest angular velocity during the set. Use it to:
+  • Confirm or correct the exercise classification (equipment, stance, grip, body orientation)
+  • Identify visual cues not captured by angles alone (e.g., loaded barbell = heavier exercise variant, bench = bench press)
+  • Assess camera angle quality for gating decisions
+  • If no image is attached, rely solely on the angle data.
 - **Complexity Paradox:** Prioritize 2D landmark stability (X, Y) over unstable 3D Z-axis projections unless the view is strictly sagittal.
 - **Signal Processing:** Assume raw data contains jitter. Apply logical smoothing: do not flag faults based on single-frame anomalies; require a fault to persist for >0.2 seconds.
 
@@ -322,9 +327,12 @@ def _compute_angles(landmarks) -> dict[str, float]:
 
 def _process_video(
     video_path: str, angle_every_n: int | None = None
-) -> tuple[str, list[dict[str, Any]]]:
+) -> tuple[str, list[dict[str, Any]], bytes | None, float]:
     """Run MediaPipe on *every* frame for smooth frontend overlay,
     but only compute joint angles on sampled frames for the LLM.
+
+    Also captures the single frame with the highest angular velocity
+    (peak-motion frame) and returns it as a JPEG for Gemini visual context.
 
     Returns
     -------
@@ -333,6 +341,10 @@ def _process_video(
     raw_frames : list[dict]
         Per-frame raw landmark data (every frame) for the frontend overlay.
         Each dict: {"time_s": float, "landmarks": [{name, x, y, z}, ...]}
+    peak_frame_jpeg : bytes | None
+        JPEG-encoded BGR frame at the moment of highest angular velocity.
+    peak_frame_time : float
+        Timestamp (seconds) of the peak-motion frame.
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -356,6 +368,12 @@ def _process_video(
     angle_lines: list[str] = []
     raw_frames: list[dict[str, Any]] = []
     frame_idx = 0
+
+    # Track angular velocity to find the peak-motion frame
+    prev_angles: dict[str, float] | None = None
+    max_velocity = 0.0
+    peak_bgr_frame = None  # raw BGR numpy array
+    peak_frame_time = 0.0
 
     try:
         while True:
@@ -385,6 +403,17 @@ def _process_video(
                         f"t={timestamp_s:.3f} " + " ".join(angle_parts)
                     )
 
+                    # ── Track peak angular velocity ───────────────
+                    if prev_angles is not None:
+                        velocity = sum(
+                            abs(angles[k] - prev_angles[k]) for k in angles
+                        )
+                        if velocity > max_velocity:
+                            max_velocity = velocity
+                            peak_bgr_frame = frame.copy()
+                            peak_frame_time = timestamp_s
+                    prev_angles = angles
+
             frame_idx += 1
     finally:
         cap.release()
@@ -393,33 +422,56 @@ def _process_video(
     if not angle_lines:
         raise RuntimeError("MediaPipe could not detect any pose in the video.")
 
+    # Encode peak-motion frame as JPEG
+    peak_frame_jpeg: bytes | None = None
+    if peak_bgr_frame is not None:
+        ok, buf = cv2.imencode(".jpg", peak_bgr_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if ok:
+            peak_frame_jpeg = buf.tobytes()
+            logger.info(
+                "Peak-motion frame at t=%.3fs (velocity=%.1f), JPEG=%d bytes",
+                peak_frame_time, max_velocity, len(peak_frame_jpeg),
+            )
+
     logger.info(
         "Processed %d frames → %d landmark frames, %d angle samples",
         frame_idx, len(raw_frames), len(angle_lines),
     )
-    return "\n".join(angle_lines), raw_frames
+    return "\n".join(angle_lines), raw_frames, peak_frame_jpeg, peak_frame_time
 
 
 # ---------------------------------------------------------------------------
 # Gemini helper
 # ---------------------------------------------------------------------------
-def _interpret_with_gemini(angle_text: str) -> dict[str, Any]:
-    """Send the joint-angle time-series to Gemini and parse the JSON response."""
+def _interpret_with_gemini(
+    angle_text: str, peak_frame_jpeg: bytes | None = None
+) -> dict[str, Any]:
+    """Send the joint-angle time-series (+ optional peak-motion image) to Gemini."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set.")
 
     client = genai.Client(api_key=GEMINI_API_KEY)
 
-    prompt = (
+    prompt_text = (
         f"{SYSTEM_PROMPT}\n\n"
         "Here are the joint angles (degrees) extracted from a workout video:\n\n"
         f"{angle_text}"
     )
 
+    # Build multimodal contents: text + optional image
+    if peak_frame_jpeg:
+        contents = [
+            types.Part.from_bytes(data=peak_frame_jpeg, mime_type="image/jpeg"),
+            prompt_text,
+        ]
+        logger.info("Sending multimodal request (text + %d-byte image)", len(peak_frame_jpeg))
+    else:
+        contents = prompt_text
+
     try:
         response = client.models.generate_content(
             model=GEMINI_MODEL,
-            contents=prompt,
+            contents=contents,
             config=types.GenerateContentConfig(
                 temperature=0.2,
                 max_output_tokens=8192,
@@ -434,7 +486,7 @@ def _interpret_with_gemini(angle_text: str) -> dict[str, Any]:
         )
         response = client.models.generate_content(
             model=GEMINI_MODEL,
-            contents=prompt,
+            contents=contents,
             config={
                 "temperature": 0.2,
                 "max_output_tokens": 8192,
@@ -523,9 +575,11 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
         # Convert WebM/other formats to MP4 for reliable OpenCV decoding
         mp4_path = _ensure_mp4(tmp_path)
 
-        # Step A – extract joint angles + raw landmarks
+        # Step A – extract joint angles + raw landmarks + peak frame
         logger.info("Step A: processing video %s", mp4_path.name)
-        angle_text, raw_frames = _process_video(str(mp4_path))
+        angle_text, raw_frames, peak_frame_jpeg, peak_frame_time = _process_video(
+            str(mp4_path)
+        )
 
         # Step B – buffer raw landmarks in Redis for frontend overlay
         task_id = self.request.id
@@ -540,9 +594,21 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
             except Exception as exc:
                 logger.warning("Failed to buffer landmarks in Redis: %s", exc)
 
-        # Step C – interpret with Gemini
+            # Buffer peak-motion frame JPEG for frontend display
+            if peak_frame_jpeg:
+                try:
+                    _redis.set(
+                        f"peak_frame:{task_id}",
+                        base64.b64encode(peak_frame_jpeg).decode(),
+                        ex=LANDMARKS_TTL,
+                    )
+                except Exception as exc:
+                    logger.warning("Failed to buffer peak frame in Redis: %s", exc)
+
+        # Step C – interpret with Gemini (multimodal: angles + peak frame image)
         logger.info("Step C: sending %d chars of angle data to Gemini", len(angle_text))
-        analysis = _interpret_with_gemini(angle_text)
+        analysis = _interpret_with_gemini(angle_text, peak_frame_jpeg)
+        analysis["peak_frame_time"] = peak_frame_time
 
         # Step D – resolve per-rep problem_joints to landmark ranges for frontend
         problem_landmark_ranges: list[dict] = []

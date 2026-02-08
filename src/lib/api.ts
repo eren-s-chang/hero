@@ -38,6 +38,7 @@ export interface AnalysisResult {
   problem_joints?: string[];
   problem_landmarks?: string[];
   problem_landmark_ranges?: ProblemLandmarkRange[];
+  peak_frame_time?: number;
   actionable_correction: string;
 }
 
@@ -118,5 +119,17 @@ export async function healthCheck(): Promise<boolean> {
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+/** Fetch the peak-motion frame image as an object URL. */
+export async function fetchPeakFrame(taskId: string): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/peak-frame/${taskId}`);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return URL.createObjectURL(blob);
+  } catch {
+    return null;
   }
 }

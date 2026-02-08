@@ -19,7 +19,7 @@ from pathlib import Path
 import redis
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from backend.worker import analyze_video  # Celery task
 from celery.result import AsyncResult
@@ -153,3 +153,27 @@ async def landmarks(task_id: str):
         )
 
     return {"task_id": task_id, "frames": json.loads(data)}
+
+
+@app.get("/peak-frame/{task_id}")
+async def peak_frame(task_id: str):
+    """Return the peak-motion frame captured during analysis.
+
+    This is the single video frame with the highest angular velocity,
+    representing the most dynamic moment of the set.  Stored as
+    base64-encoded JPEG in Redis.
+    """
+    redis_key = f"peak_frame:{task_id}"
+    data = _redis.get(redis_key)
+
+    if data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Peak frame not found. It may have expired or the task hasn't completed yet.",
+        )
+
+    return Response(
+        content=base64.b64decode(data),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )

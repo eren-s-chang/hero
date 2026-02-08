@@ -9,6 +9,7 @@ import {
   Zap,
   Target,
   TrendingDown,
+  Camera,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
@@ -16,6 +17,7 @@ import { toast } from "sonner";
 import {
   fetchResult,
   fetchLandmarks,
+  fetchPeakFrame,
   type AnalysisResult,
   type RepAnalysis,
   type LandmarkFrame,
@@ -153,6 +155,9 @@ export default function Results() {
   // Landmarks
   const [frames, setFrames] = useState<LandmarkFrame[]>([]);
 
+  // Peak-motion frame
+  const [peakFrameUrl, setPeakFrameUrl] = useState<string | null>(null);
+
   // Rep selection
   const [activeRep, setActiveRep] = useState<number | null>(null);
 
@@ -203,7 +208,7 @@ export default function Results() {
     };
   }, [taskId]);
 
-  // ---- Fetch landmarks once completed --------------------------------------
+  // ---- Fetch landmarks + peak frame once completed --------------------------
   useEffect(() => {
     if (status !== "completed" || !taskId) return;
 
@@ -212,6 +217,12 @@ export default function Results() {
       .catch(() => {
         // non-critical — skeleton just won't show
         console.warn("Could not load landmarks for overlay");
+      });
+
+    fetchPeakFrame(taskId)
+      .then((url) => setPeakFrameUrl(url))
+      .catch(() => {
+        console.warn("Could not load peak frame");
       });
   }, [status, taskId]);
 
@@ -536,6 +547,36 @@ export default function Results() {
             <h3 className="font-heading text-2xl tracking-wider mb-4">
               YOUR VIDEO
             </h3>
+
+            {/* Peak-motion frame thumbnail */}
+            {peakFrameUrl && (
+              <div className="mb-4 flex items-start gap-4 bg-card border border-border rounded-md p-4">
+                <div className="relative flex-shrink-0 rounded overflow-hidden border border-border">
+                  <img
+                    src={peakFrameUrl}
+                    alt="Peak motion frame"
+                    className="w-32 h-auto object-contain"
+                  />
+                  <div className="absolute bottom-0 inset-x-0 bg-black/70 text-center py-0.5">
+                    <span className="text-[10px] font-modern text-primary">
+                      {result.peak_frame_time != null
+                        ? `${result.peak_frame_time.toFixed(1)}s`
+                        : ""}
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <p className="font-heading text-sm tracking-wider text-primary flex items-center gap-1.5 mb-1">
+                    <Camera className="w-3.5 h-3.5" /> PEAK MOTION FRAME
+                  </p>
+                  <p className="text-xs text-muted-foreground font-modern leading-relaxed">
+                    The moment of highest angular velocity during your set — this
+                    frame was sent to the AI alongside the angle data for visual
+                    context.
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="relative rounded-md overflow-hidden border-2 border-border bg-background">
               <video
                 ref={videoRef}
