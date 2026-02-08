@@ -23,6 +23,7 @@ import {
   type LandmarkFrame,
   type Mistake,
 } from "@/lib/api";
+import { fetchCorrectionAudio } from "@/lib/api";
 import SkeletonOverlay from "@/components/SkeletonOverlay";
 
 // ---------------------------------------------------------------------------
@@ -162,6 +163,10 @@ export default function Results() {
   // Rep selection
   const [activeRep, setActiveRep] = useState<number | null>(null);
 
+  // Correction audio
+  const [correctionAudioUrl, setCorrectionAudioUrl] = useState<string>("");
+  const audioRef = useRef<HTMLAudioElement>(null);
+
   // ---- Polling loop --------------------------------------------------------
   useEffect(() => {
     if (!taskId) return;
@@ -232,6 +237,27 @@ export default function Results() {
       )
       .catch(() => console.warn("Could not load rep frames"));
   }, [taskId, result]);
+
+  // ---- Fetch and auto-play correction audio once analysis completes --------
+  useEffect(() => {
+    if (status !== "completed" || !taskId) return;
+
+    fetchCorrectionAudio(taskId)
+      .then((data) => {
+        setCorrectionAudioUrl(data.audio_url);
+        // Auto-play the audio
+        setTimeout(() => {
+          if (audioRef.current) {
+            audioRef.current.play().catch(() => {
+              console.warn("Could not auto-play correction audio");
+            });
+          }
+        }, 500);
+      })
+      .catch((err) => {
+        console.warn("Could not load correction audio:", err);
+      });
+  }, [status, taskId]);
 
   // ---- Time-scale factor ---------------------------------------------------
   // The backend analysed the *downscaled* video whose duration may differ
@@ -389,6 +415,15 @@ export default function Results() {
   if (!analysisAllowed) {
     return (
       <main className="bg-background text-foreground min-h-screen relative overflow-hidden">
+              {/* Hidden audio element for auto-playing corrections */}
+              {correctionAudioUrl && (
+                <audio
+                  ref={audioRef}
+                  src={correctionAudioUrl}
+                  autoPlay={false}
+                  controls={false}
+                />
+              )}
         {/* Particles */}
         <div className="absolute inset-0 pointer-events-none">
           {[...Array(6)].map((_, i) => (
