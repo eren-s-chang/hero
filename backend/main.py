@@ -157,7 +157,17 @@ async def landmarks(task_id: str):
 
 @app.get("/rep-frame/{task_id}/{index}")
 async def rep_frame(task_id: str, index: int):
-    """Return a single mid-rep reference frame JPEG by index."""
+    """Return a single frame JPEG by flat index (across all reps and frame types).
+    
+    New data structure (post-enhancement):
+    [
+      {"rep_number": 1, "frames": {"start": {...}, "mid": {...}, "end": {...}}},
+      {"rep_number": 2, "frames": {...}},
+      ...
+    ]
+    
+    This flattens to: rep1_start, rep1_mid, rep1_end, rep2_start, rep2_mid, ...
+    """
     redis_key = f"rep_frames:{task_id}"
     data = _redis.get(redis_key)
 
@@ -168,14 +178,24 @@ async def rep_frame(task_id: str, index: int):
         )
 
     payload = json.loads(data)
-    if index < 0 or index >= len(payload):
+    
+    # Flatten all frames from all reps into a single list for backward compatibility
+    flat_frames = []
+    for rep_data in payload:
+        # Order: start, mid, end for each rep
+        for frame_type in ["start", "mid", "end"]:
+            if frame_type in rep_data.get("frames", {}):
+                flat_frames.append(rep_data["frames"][frame_type])
+    
+    if index < 0 or index >= len(flat_frames):
         raise HTTPException(
             status_code=404,
-            detail=f"Frame index {index} out of range (0–{len(payload) - 1}).",
+            detail=f"Frame index {index} out of range (0–{len(flat_frames) - 1}). Total frames: {len(flat_frames)}",
         )
 
+    frame_data = flat_frames[index]
     return Response(
-        content=base64.b64decode(payload[index]["b64"]),
+        content=base64.b64decode(frame_data["b64"]),
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=3600"},
     )
