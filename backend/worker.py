@@ -191,13 +191,13 @@ C. PUSH-UP FAULTS
 
 8. CONFIDENCE-BASED SCORING
 ──────────────────────────
-Only apply deduction if confidence ≥ 0.75 (75% certain).
+Only apply deduction if confidence ≥ 0.5 (75% certain).
 For each fault, output:
   - fault: name of the fault
   - confidence: 0–1 (how certain you are)
   - visual_evidence: what you see in the image ("knees caving inward visually", etc.)
   - angle_evidence: which angles support this ("inter-knee ratio 0.72", etc.)
-  - deduction: only apply if confidence ≥ 0.75
+  - deduction: only apply if confidence ≥ 0.5
 
 If confidence < 0.75, include the fault for user awareness but do NOT deduct points.
 
@@ -897,8 +897,8 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
                     if not isinstance(m, dict):
                         continue
                     conf = m.get("confidence")
-                    # Apply deduction only when confidence is missing or >= 0.75
-                    if conf is not None and conf < 0.75:
+                    # Apply deduction only when confidence is missing or >= 0.50
+                    if conf is not None and conf < 0.5:
                         continue
                     try:
                         ded = float(m.get("deduction", 0) or 0)
