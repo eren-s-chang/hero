@@ -86,9 +86,13 @@ A 'Rep' is a transfer of energy through a kinetic chain. You must identify 'Ener
 - Segmental Lag: If one body segment (e.g., the hips) moves significantly after another (e.g., the shoulders) on the ascent, this is a 'Moderate' energy leak.
 - Structural Collapse: If a joint fails to maintain its position relative to the rigid cylinder (e.g., hips dropping to the floor), this is a 'Severe' energy leak.
 - Tension Loss: Identify jitter or 'shaking' as high-frequency energy leaks indicative of neurological fatigue.
+- Lateral Integrity Rule: Evaluate the $X$-axis (side-to-side) and $Z$-axis (depth) synchronicity. 
+- If the left and right sides of the 'Rigid Cylinder' do not move in a 1:1 ratio, classify it as an Asymmetrical Energy Leak. 
+- Use adjectives like 'Lopsided' or 'Unbalanced' to trigger semantic penalties.
 
 4. ADJECTIVE-BASED PENALIZATION (SMART SCORING)
 Every rep starts at 10.0. The deduction for a fault is scaled by the 'Connotation' of the adjective you choose:
+If you find no issues, you can just give the rep a 10, no need to be a teacher who doesn't give out 10s just for the sake of not giving out 10s.
 - 'Negligible' / 'Trace' (0.1x - 0.2x): Slight aesthetic deviation; no functional energy leak.
 - 'Noticeable' / 'Minor' (0.3x - 0.5x): Clear energy leak; requires corrective cueing.
 - 'Significant' / 'Pronounced' (0.6x - 0.8x): Major structural leak; energy is no longer transferring efficiently.
