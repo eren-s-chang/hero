@@ -68,7 +68,7 @@ LANDMARKS_TTL = 3600  # same as result_expires
 # Gemini config
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 SYSTEM_PROMPT = (
 """ You are the MediaPipe Biomechanical Analysis Engine (MBAE). Your specific purpose is to analyze kinematic data (joint coordinates and angles) combined with visual context to classify exercises, count repetitions, and score movement quality with clinical precision.
@@ -171,7 +171,7 @@ Minor (-1.0): Elbow Drift (Humerus vector is unstable).
 6. REQUIRED OUTPUT SCHEMA
 You must strictly adhere to this JSON structure:
 
-{ "type": "object", "properties": { "analysis_allowed": { "type": "boolean", "description": "True if landmarks are visible and camera angle allows valid assessment." }, "rejection_reason": { "type": "string", "description": "If analysis_allowed is false, state why. Otherwise empty string." }, "exercise_detected": { "type": "string", "enum": ["Squat", "Deadlift", "Lunge", "Overhead Press", "Bench Press", "Pull-Up", "Row", "Bicep Curl", "Tricep Extension", "Unknown"], "description": "Identified primarily via image context." }, "rep_count": { "type": "integer", "description": "Total completed reps passing the FSM check." }, "form_rating_1_to_10": { "type": "integer", "description": "Holistic score (1-10). Start at 10, subtract deductions." }, "main_mistakes": { "type": "array", "items": {"type": "string"}, "description": "List of distinct faults detected via biomechanical angle analysis." }, "rep_analyses": { "type": "array", "items": { "type": "object", "properties": { "rep_number": {"type": "integer"}, "timestamp_start": {"type": "number"}, "timestamp_end": {"type": "number"}, "rating_1_to_10": {"type": "integer"}, "mistakes": { "type": "array", "items": {"type": "string"} }, "problem_joints": { "type": "array", "items": {"type": "string"} } }, "required": ["rep_number", "timestamp_start", "timestamp_end", "rating_1_to_10", "mistakes", "problem_joints"] } }, "problem_joints": { "type": "array", "items": {"type": "string"}, "description": "Aggregate list of joints where angles deviated from the ideal model." }, "actionable_correction": { "type": "string", "description": "A single, high-impact coaching cue based on the most frequent fault." } }, "required": [ "analysis_allowed", "rejection_reason", "exercise_detected", "rep_count", "form_rating_1_to_10", "main_mistakes", "rep_analyses", "problem_joints", "actionable_correction" ] } """
+{ "type": "object", "properties": { "analysis_allowed": { "type": "boolean", "description": "True if landmarks are visible and camera angle allows valid assessment." }, "rejection_reason": { "type": "string", "description": "If analysis_allowed is false, state why. Otherwise empty string." }, "exercise_detected": { "type": "string", "enum": ["Squat", "Deadlift", "Lunge", "Overhead Press", "Bench Press", "Pull-Up", "Row", "Bicep Curl", "Tricep Extension", "Unknown"], "description": "Identified primarily via image context." }, "rep_count": { "type": "integer", "description": "Total completed reps passing the FSM check." }, "form_rating_1_to_10": { "type": "integer", "description": "Holistic score (1-10). Start at 10, subtract deductions." }, "main_mistakes": { "type": "array", "items": {"type": "string"}, "description": "List of distinct faults detected via biomechanical angle analysis." }, "rep_analyses": { "type": "array", "items": { "type": "object", "properties": { "rep_number": {"type": "integer"}, "timestamp_start": {"type": "number"}, "timestamp_end": {"type": "number"}, "rating_1_to_10": {"type": "integer"}, "mistakes": { "type": "array", "items": {"type": "string"} }, "problem_joints": { "type": "array", "items": {"type": "string"} } }, "required": ["rep_number", "timestamp_start", "timestamp_end", "rating_1_to_10", "mistakes", "problem_joints"] } }, "problem_joints": { "type": "array", "items": {"type": "string"}, "description": "Aggregate list of joints where angles deviated from the ideal model." }, "visual_description": { "type": "string", "description": "If reference images were provided, a 2-3 sentence description of what is visually observed across the images: person's body position, equipment, environment, stance, and any visible form issues. Empty string if no images." }, "actionable_correction": { "type": "string", "description": "A single, high-impact coaching cue based on the most frequent fault." } }, "required": [ "analysis_allowed", "rejection_reason", "exercise_detected", "rep_count", "form_rating_1_to_10", "main_mistakes", "rep_analyses", "problem_joints", "visual_description", "actionable_correction" ] } """
 )
 
 
@@ -212,6 +212,7 @@ RESPONSE_JSON_SCHEMA = {
             "type": "array",
             "items": {"type": "string"},
         },
+        "visual_description": {"type": "string"},
         "actionable_correction": {"type": "string"},
     },
     "required": [
@@ -223,6 +224,7 @@ RESPONSE_JSON_SCHEMA = {
         "main_mistakes",
         "rep_analyses",
         "problem_joints",
+        "visual_description",
         "actionable_correction",
     ],
 }
@@ -543,10 +545,19 @@ def _gemini_pass2(
         f"{SYSTEM_PROMPT}\n\n"
         "You previously analyzed this data using angles only. Now you also have "
         f"{len(rep_jpegs)} mid-rep reference images (one per rep, captured at "
-        "the temporal midpoint of each repetition). Use them to visually verify "
-        "and refine your analysis. Correct any errors — especially exercise "
-        "classification, depth assessment, and form faults that are visually "
-        "apparent.\n\n"
+        "the temporal midpoint of each repetition).\n\n"
+        "INSTRUCTIONS FOR IMAGE ANALYSIS:\n"
+        "1. First, describe what you see in the images in the \"visual_description\" "
+        "field: the person's body position, equipment visible (barbell, dumbbells, "
+        "bench, rack, etc.), environment, stance width, grip type, and any visible "
+        "form issues.\n"
+        "2. Use this visual description as confluence evidence alongside the angle "
+        "data to confirm or CORRECT the exercise classification. For example, if "
+        "angles suggest a squat but the image shows a barbell on the floor with a "
+        "hip hinge, reclassify as deadlift.\n"
+        "3. Visually verify per-rep form faults: depth, alignment, posture, "
+        "knee tracking, back position.\n"
+        "4. Refine scores and mistakes based on combined angle + visual evidence.\n\n"
         f"{pass1_summary}"
         "Here are the joint angles (degrees) and landmark coordinates "
         "extracted from a workout video:\n\n"

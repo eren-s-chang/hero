@@ -499,6 +499,23 @@ export default function Results() {
           </div>
         </motion.div>
 
+        {/* ── Visual description (from image analysis) ───────────────── */}
+        {result.visual_description && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.08 }}
+            className="bg-muted/30 border border-border rounded-md p-4 mb-6"
+          >
+            <p className="font-heading text-xs tracking-wider text-muted-foreground mb-1">
+              AI VISUAL OBSERVATION
+            </p>
+            <p className="font-modern text-sm text-foreground/80 leading-relaxed">
+              {result.visual_description}
+            </p>
+          </motion.div>
+        )}
+
         {/* ── Actionable correction ──────────────────────────────────── */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
