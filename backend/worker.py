@@ -183,11 +183,11 @@ B. DEADLIFT FAULTS
   5. Asymmetric Pull (−1.5): One side clearly stronger in images; |L_knee − R_knee| > 12° during pull
 
 C. PUSH-UP FAULTS
-  1. Sagging Core (−3.0): Hips visibly drop below shoulder-ankle line; hip angle deviation > 25°
-  2. Incomplete Depth (−3.0): Elbows don't bend sufficiently; Min(L_elbow, R_elbow) < 75°
-  3. Extreme Elbow Flare (−2.0): Elbows way out to sides in images; L_shoulder or R_shoulder > 80°
-  4. Head Position (−1.5): Head visibly cranks forward; upper spine angle change > 12° from start to bottom
-  5. Incomplete Lockout (−1.5): Elbows not straight at top; final (L_elbow + R_elbow)/2 > 20°
+  1. Sagging Core (-3.0): Hips drop towards floor; Spine-Hip-Knee angle > 195° (Hyperextension) OR < 160° (if calculating interior angle).
+  2. Incomplete Depth (-3.0): Upper arm fails to reach parallel; Min(L_elbow, R_elbow) > 95° at bottom.
+  3. Extreme Elbow Flare (-2.0): Elbows point outward 90° from torso (T-shape); Shoulder-Hip-Elbow angle > 75° (Requires Top/Front view).
+  4. Piking (-2.0): Hips shoot up; Spine-Hip-Knee angle < 160° (Flexion).
+  5. Incomplete Lockout (-1.5): Elbows stay bent at top; Max(L_elbow, R_elbow) < 165° at start/end.
 
 8. CONFIDENCE-BASED SCORING
 ──────────────────────────
