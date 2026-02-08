@@ -1,14 +1,8 @@
-# Welcome to your Lovable project
-
-## Project info
-
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
-
-# FormPerfect — Exercise Form Analysis
+# Hero — Exercise Form Analysis
 
 Short description
 -----------------
-FormPerfect is an AI-powered exercise form analysis system that evaluates bodyweight and barbell exercises (Push-up, Squat, Deadlift, etc.), produces rep-level feedback and scores, and offers short, actionable coaching corrections — including synthesized voice feedback.
+Hero is an AI-powered exercise form analysis system that evaluates bodyweight and barbell exercises (Push-up, Squat, Deadlift, etc.), produces rep-level feedback and scores, and offers short, actionable coaching corrections — including synthesized voice feedback.
 
 Repository layout
 -----------------
@@ -96,15 +90,8 @@ Production notes
 - Do not commit secrets to the repository. Use environment/secret managers in production.
 - Rate-limit / authenticate public endpoints; the LLM and ElevenLabs APIs are billable.
 
-Next steps (suggested)
+Next steps
 ----------------------
 - Add a visible "Play correction" button in the Results UI (currently audio auto-plays).
 - Add fallback handling when TTS fails: surface textual correction and a retry button.
 - Add CI steps to lint and run tests, and a minimal Docker Compose for local integration testing (Redis + backend + frontend).
-
-License
--------
-This repository currently has no license file. Add a `LICENSE` when ready.
-
-—
-If you'd like any section expanded or prefer a different structure, tell me which parts to change and I'll update `README.md` accordingly. I will not commit this change until you give the go-ahead.
