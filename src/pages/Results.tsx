@@ -239,7 +239,7 @@ export default function Results() {
 
   // ---- Figure out which rep is active based on video time ------------------
   useEffect(() => {
-    if (!result || !videoRef.current) return;
+    if (!result || result.analysis_allowed === false || !videoRef.current) return;
     const video = videoRef.current;
 
     const onTimeUpdate = () => {
@@ -346,6 +346,96 @@ export default function Results() {
 
   // ---- Render: Results -----------------------------------------------------
   if (!result) return null;
+
+  const analysisAllowed = result.analysis_allowed !== false;
+  const rejectionReason = (result.rejection_reason || "").trim();
+
+  if (!analysisAllowed) {
+    return (
+      <main className="bg-background text-foreground min-h-screen relative overflow-hidden">
+        {/* Particles */}
+        <div className="absolute inset-0 pointer-events-none">
+          {[...Array(6)].map((_, i) => (
+            <motion.div
+              key={i}
+              className="absolute w-1 h-1 bg-primary/20 rounded-full"
+              initial={{ x: `${Math.random() * 100}%`, y: "100%", opacity: 0 }}
+              animate={{ y: "-10%", opacity: [0, 1, 0] }}
+              transition={{
+                duration: 6 + Math.random() * 3,
+                repeat: Infinity,
+                delay: i * 0.8,
+                ease: "linear",
+              }}
+            />
+          ))}
+        </div>
+
+        <Nav onBack={() => navigate("/demo")} />
+
+        <div className="relative z-20 px-6 md:px-12 max-w-4xl mx-auto pb-20">
+          <motion.div
+            initial={{ y: 30, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5 }}
+            className="flex items-start gap-4 bg-card border-2 border-border rounded-md p-6"
+          >
+            <AlertTriangle className="w-8 h-8 text-yellow-400 flex-shrink-0" />
+            <div>
+              <p className="font-heading text-primary text-lg tracking-wider">
+                VIDEO NOT ELIGIBLE
+              </p>
+              <h1 className="font-heading text-3xl md:text-5xl tracking-wider mb-2">
+                REP-BASED GYM EXERCISES ONLY
+              </h1>
+              <p className="text-muted-foreground font-modern">
+                {rejectionReason ||
+                  "We could not detect a common gym exercise with clear, countable reps. Sports activities and non-rep movements are not supported."}
+              </p>
+            </div>
+          </motion.div>
+
+          {videoUrl && (
+            <motion.div
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              className="mt-6"
+            >
+              <h3 className="font-heading text-2xl tracking-wider mb-4">
+                YOUR VIDEO
+              </h3>
+              <div className="relative rounded-md overflow-hidden border-2 border-border bg-background">
+                <video
+                  ref={videoRef}
+                  src={videoUrl}
+                  controls
+                  playsInline
+                  className="w-full max-h-[500px] object-contain"
+                />
+              </div>
+            </motion.div>
+          )}
+
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="mt-10 flex justify-center"
+          >
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => navigate("/demo")}
+              className="font-heading bg-secondary text-secondary-foreground px-10 py-4 text-2xl tracking-wider rounded-md flex items-center gap-3"
+            >
+              <RotateCcw className="w-6 h-6" /> UPLOAD A NEW CLIP
+            </motion.button>
+          </motion.div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="bg-background text-foreground min-h-screen relative overflow-hidden">
