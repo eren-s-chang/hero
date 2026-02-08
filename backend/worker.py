@@ -22,6 +22,10 @@ import re
 import subprocess
 import tempfile
 from collections import deque
+
+# --- Median filter state (must be defined before any function uses it) ---
+MEDIAN_WINDOW_SIZE = 5  # Number of recent frames to consider for median
+_angle_history: dict[str, deque[float]] = {}
 from pathlib import Path
 from typing import Any
 
