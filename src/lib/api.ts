@@ -2,7 +2,7 @@
 // FormPerfect API client
 // ---------------------------------------------------------------------------
 
-const API_BASE = "https://form-perfect-backend.onrender.com";
+const API_BASE = import.meta.env.VITE_API_BASE || "";
 
 // ---------------------------------------------------------------------------
 // Types
