@@ -580,11 +580,11 @@ export default function Results() {
           className="bg-card border-4 border-border rounded-md p-6 mb-8 flex items-start gap-6"
         >
           {/* Saitama face with thinking bubble */}
-          <div className="relative flex-shrink-0">
+          <div className="relative flex-shrink-0 ml-4 mt-4">
             <motion.img
               src={ThinkingBubble}
               alt="Thinking bubble"
-              className="absolute -top-8 -left-4 w-24 h-20 z-10"
+              className="absolute -top-12 -left-8 w-36 h-32 z-10 brightness-0 invert object-contain"
               initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
               animate={{ opacity: 1, scale: 1, rotate: 0 }}
               transition={{ duration: 0.4, delay: 0.3, ease: "easeOut" }}
@@ -592,7 +592,7 @@ export default function Results() {
             <motion.img
               src={SaitamaFace}
               alt="Saitama Coach"
-              className="w-24 h-24 drop-shadow-2xl"
+              className="w-36 h-36 drop-shadow-2xl object-contain"
               initial={{ scale: 0.8 }}
               animate={{ scale: 1 }}
               transition={{ duration: 0.3, delay: 0.2 }}
