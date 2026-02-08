@@ -1,0 +1,40 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/deploy-backend.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+          ssh-keyscan -H ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Stop containers
+        run: |
+          ssh -i ~/.ssh/vps_key root@${{ secrets.VPS_HOST }} \
+            "cd /opt/form-perfect && docker compose down || true"
+
+      - name: Copy files to server
+        run: |
+          rsync -avz -e "ssh -i ~/.ssh/vps_key" \
+            backend/ root@${{ secrets.VPS_HOST }}:/opt/form-perfect/backend/
+          scp -i ~/.ssh/vps_key \
+            docker-compose.yml root@${{ secrets.VPS_HOST }}:/opt/form-perfect/docker-compose.yml
+
+      - name: Rebuild and start
+        run: |
+          ssh -i ~/.ssh/vps_key root@${{ secrets.VPS_HOST }} \
+            "cd /opt/form-perfect && docker compose up -d --build --force-recreate && docker compose ps"

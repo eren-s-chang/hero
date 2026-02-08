@@ -14,14 +14,12 @@ import base64
 import json
 import logging
 import os
-import subprocess
-import tempfile
 from pathlib import Path
 
 import redis
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from backend.worker import analyze_video  # Celery task
 from celery.result import AsyncResult
@@ -58,55 +56,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-def _compress_video(raw_bytes: bytes, ext: str) -> bytes:
-    """Re-encode video with FFmpeg to shrink it before sending to Redis.
-
-    Strategy: scale to 480p, CRF 30, fast preset, strip audio.
-    Falls back to the original bytes if FFmpeg is unavailable or fails.
-    """
-    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as src:
-        src.write(raw_bytes)
-        src_path = src.name
-
-    dst_path = src_path + ".compressed.mp4"
-
-    try:
-        subprocess.run(
-            [
-                "ffmpeg", "-y",
-                "-i", src_path,
-                "-vf", "scale=-2:480",      # max 480p height
-                "-c:v", "libx264",
-                "-preset", "ultrafast",
-                "-crf", "30",
-                "-an",                       # strip audio
-                "-movflags", "+faststart",
-                dst_path,
-            ],
-            check=True,
-            capture_output=True,
-            timeout=120,
-        )
-        compressed = Path(dst_path).read_bytes()
-        ratio = len(compressed) / len(raw_bytes) * 100
-        logger.info(
-            "Compressed %s: %.1f MB → %.1f MB (%.0f%%)",
-            ext,
-            len(raw_bytes) / 1e6,
-            len(compressed) / 1e6,
-            ratio,
-        )
-        return compressed
-
-    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired) as exc:
-        logger.warning("FFmpeg compression failed, using original bytes: %s", exc)
-        return raw_bytes
-
-    finally:
-        Path(src_path).unlink(missing_ok=True)
-        Path(dst_path).unlink(missing_ok=True)
-
-
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -139,9 +88,6 @@ async def analyze(video: UploadFile = File(...)):
             status_code=413,
             detail=f"File too large ({file_size_mb:.1f} MB). Max {MAX_FILE_SIZE_MB} MB.",
         )
-
-    # --- Compress before sending through Redis --------------------------------
-    video_bytes = _compress_video(video_bytes, ext)
 
     # --- Dispatch Celery task (video bytes as base64) -------------------------
     video_b64 = base64.b64encode(video_bytes).decode("ascii")
@@ -207,3 +153,49 @@ async def landmarks(task_id: str):
         )
 
     return {"task_id": task_id, "frames": json.loads(data)}
+
+
+@app.get("/rep-frame/{task_id}/{index}")
+async def rep_frame(task_id: str, index: int):
+    """Return a single frame JPEG by flat index (across all reps and frame types).
+    
+    New data structure (post-enhancement):
+    [
+      {"rep_number": 1, "frames": {"start": {...}, "mid": {...}, "end": {...}}},
+      {"rep_number": 2, "frames": {...}},
+      ...
+    ]
+    
+    This flattens to: rep1_start, rep1_mid, rep1_end, rep2_start, rep2_mid, ...
+    """
+    redis_key = f"rep_frames:{task_id}"
+    data = _redis.get(redis_key)
+
+    if data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Rep frames not found. They may have expired or the task hasn't completed yet.",
+        )
+
+    payload = json.loads(data)
+    
+    # Flatten all frames from all reps into a single list for backward compatibility
+    flat_frames = []
+    for rep_data in payload:
+        # Order: start, mid, end for each rep
+        for frame_type in ["start", "mid", "end"]:
+            if frame_type in rep_data.get("frames", {}):
+                flat_frames.append(rep_data["frames"][frame_type])
+    
+    if index < 0 or index >= len(flat_frames):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Frame index {index} out of range (0–{len(flat_frames) - 1}). Total frames: {len(flat_frames)}",
+        )
+
+    frame_data = flat_frames[index]
+    return Response(
+        content=base64.b64decode(frame_data["b64"]),
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
