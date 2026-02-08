@@ -4,9 +4,10 @@ FROM python:3.10-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# System deps required by MediaPipe / OpenCV-headless
+# System deps required by MediaPipe / OpenCV
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
+        libgl1 \
         libglib2.0-0 \
         libsm6 \
         libxext6 \
