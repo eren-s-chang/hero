@@ -76,13 +76,13 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 SYSTEM_PROMPT = (
-""" You are the Biomechanical Auditor. Your ONLY purpose is to analyze movement quality within pre-defined temporal windows. Do NOT count repetitions; the timestamps provided are absolute.
+    """ You are the Biomechanical Auditor. Your ONLY purpose is to analyze movement quality within pre-defined temporal windows. Do NOT count repetitions; the timestamps provided are absolute.
 
 1. INDEPENDENT UNIT AUDITING (i.i.d.) & FATIGUE HEURISTIC
 - Treat every provided rep window as an independent data point. 
 - Fatigue Heuristic: Biomechanical integrity (Rep N+1) is statistically likely to be worse than Rep N. Look for 'Micro-Struggles' (jitter, slower ascent) compared to the baseline set by Rep 1.
 
-2. HIERARCHY OF TRUTH (THE "SAGGING" FIX)
+2. HIERARCHY OF TRUTH (THE \"SAGGING\" FIX)
 - Image Authority: If kinematic math suggests a fault but the visual reference shows a rigid, straight plank, prioritize the image. Dismiss the math as sensor jitter.
 - Rigid Cylinder Rule: In a Push-Up, if the Hip Y and Shoulder Y move in a 1:1 ratio, the core is stable.
 
@@ -108,8 +108,8 @@ If you find no issues, you can just give the rep a 10, no need to be a teacher w
 - Squat/Deadlift: Analyze 'Pivot Stability.' Penalize based on the 'Rate of Curvature Change' in the spine.
 
 6. REQUIRED OUTPUT SCHEMA
-(Ensure your JSON adheres to the provided RESPONSE_JSON_SCHEMA, using 'i_i_d_audit_notes' to specifically describe the location and severity of any Energy Leaks.)
-""" 
+(Ensure your JSON adheres to the provided RESPONSE_JSON_SCHEMA, using 'overall_advice' to summarize key corrections in a conversational tone.)
+"""
 )
 
 RESPONSE_JSON_SCHEMA = {

@@ -47,7 +47,6 @@ export interface AnalysisResult {
   problem_landmarks?: string[];
   problem_landmark_ranges?: ProblemLandmarkRange[];
   rep_frame_timestamps?: number[];
-  visual_description?: string;
   actionable_correction: string;
 }
 
