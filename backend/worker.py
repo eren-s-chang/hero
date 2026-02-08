@@ -229,6 +229,46 @@ RESPONSE_JSON_SCHEMA = {
     ],
 }
 
+# Pass 1 schema — minimal, rep detection only (no classification or scoring)
+_PASS1_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "rep_count": {"type": "integer"},
+        "rep_analyses": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "rep_number": {"type": "integer"},
+                    "timestamp_start": {"type": "number"},
+                    "timestamp_end": {"type": "number"},
+                },
+                "required": ["rep_number", "timestamp_start", "timestamp_end"],
+            },
+        },
+    },
+    "required": ["rep_count", "rep_analyses"],
+}
+
+_PASS1_PROMPT = (
+    "You are a repetition-detection engine. Your ONLY task is to identify "
+    "individual exercise repetitions from joint-angle time-series data.\n\n"
+    "Use a 3-State Finite State Machine with Hysteresis:\n"
+    "- State A (Start): Joint angle at resting threshold.\n"
+    "- State B (Inflection): Joint angle crosses effort threshold "
+    "(significant ROM change in the primary mover joints — knees, hips, "
+    "elbows, or shoulders).\n"
+    "- State C (Return): Transition B → A. Count a rep if ROM change > 45° "
+    "and duration > 0.4s.\n\n"
+    "Apply logical smoothing: ignore single-frame anomalies (<0.2s).\n\n"
+    "Output ONLY:\n"
+    '- \"rep_count\": total completed reps\n'
+    '- \"rep_analyses\": array of {\"rep_number\", \"timestamp_start\", '
+    '\"timestamp_end\"} for each rep\n\n'
+    "Do NOT classify the exercise. Do NOT score form. ONLY detect rep "
+    "boundaries and timestamps."
+)
+
 # ---------------------------------------------------------------------------
 # MediaPipe helpers
 # ---------------------------------------------------------------------------
@@ -454,11 +494,13 @@ _FALLBACK_RESULT: dict[str, Any] = {
 def _gemini_call(
     contents: str | list,
     tag: str = "",
+    schema: dict | None = None,
 ) -> dict[str, Any]:
     """Low-level Gemini call with structured JSON parsing. Shared by both passes."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set.")
 
+    effective_schema = schema or RESPONSE_JSON_SCHEMA
     client = genai.Client(api_key=GEMINI_API_KEY)
 
     try:
@@ -469,7 +511,7 @@ def _gemini_call(
                 temperature=0.2,
                 max_output_tokens=8192,
                 response_mime_type="application/json",
-                response_schema=RESPONSE_JSON_SCHEMA,
+                response_schema=effective_schema,
             ),
         )
     except Exception as exc:
@@ -511,68 +553,88 @@ def _gemini_call(
 
 
 def _gemini_pass1(angle_text: str) -> dict[str, Any]:
-    """Pass 1 — text-only.  Send angle + coordinate data to get rep
-    timestamps, exercise classification, scoring, and per-rep analysis."""
+    """Pass 1 — text-only.  Detect rep boundaries ONLY (no classification
+    or scoring).  Returns {rep_count, rep_analyses[{rep_number, timestamp_start,
+    timestamp_end}]}."""
     prompt = (
-        f"{SYSTEM_PROMPT}\n\n"
+        f"{_PASS1_PROMPT}\n\n"
         "Here are the joint angles (degrees) and landmark coordinates "
         "extracted from a workout video:\n\n"
         f"{angle_text}"
     )
-    logger.info("[Pass 1] Sending %d chars of angle data (text-only)", len(angle_text))
-    return _gemini_call(prompt, tag="Pass 1")
+    logger.info("[Pass 1] Sending %d chars of angle data (rep detection only)", len(angle_text))
+    return _gemini_call(prompt, tag="Pass 1", schema=_PASS1_SCHEMA)
 
 
 def _gemini_pass2(
     angle_text: str,
     rep_jpegs: list[tuple[float, bytes]],
-    pass1_result: dict[str, Any],
+    pass1_rep_analyses: list[dict],
 ) -> dict[str, Any]:
-    """Pass 2 — multimodal.  Re-send angles + per-rep mid-rep images
-    so Gemini can visually verify and refine the analysis from Pass 1."""
-    if not rep_jpegs:
-        return pass1_result
+    """Pass 2 — PRIMARY analysis.  Classify exercise from images, score
+    form from angles, detect faults.  Uses rep timestamps from Pass 1 as
+    structural context only."""
 
-    # Build a short summary of Pass 1 to give Gemini context
-    pass1_summary = (
-        f"Previous text-only analysis detected: {pass1_result.get('exercise_detected', 'Unknown')}, "
-        f"{pass1_result.get('rep_count', 0)} reps, "
-        f"score {pass1_result.get('form_rating_1_to_10', 0)}/10.\n"
-        f"Main mistakes: {', '.join(pass1_result.get('main_mistakes', [])) or 'none'}.\n\n"
-    )
+    # Build rep-boundary context from Pass 1
+    rep_context = ""
+    if pass1_rep_analyses:
+        rep_lines = []
+        for r in pass1_rep_analyses:
+            rep_lines.append(
+                f"  Rep {r.get('rep_number', '?')}: "
+                f"{r.get('timestamp_start', 0):.2f}s – {r.get('timestamp_end', 0):.2f}s"
+            )
+        rep_context = (
+            "Rep boundaries detected from angle analysis:\n"
+            + "\n".join(rep_lines) + "\n\n"
+        )
 
-    prompt = (
-        f"{SYSTEM_PROMPT}\n\n"
-        "You previously analyzed this data using angles only. Now you also have "
-        f"{len(rep_jpegs)} mid-rep reference images (one per rep, captured at "
-        "the temporal midpoint of each repetition).\n\n"
-        "INSTRUCTIONS FOR IMAGE ANALYSIS:\n"
-        "1. First, describe what you see in the images in the \"visual_description\" "
-        "field: the person's body position, equipment visible (barbell, dumbbells, "
-        "bench, rack, etc.), environment, stance width, grip type, and any visible "
-        "form issues.\n"
-        "2. Use this visual description as confluence evidence alongside the angle "
-        "data to confirm or CORRECT the exercise classification. For example, if "
-        "angles suggest a squat but the image shows a barbell on the floor with a "
-        "hip hinge, reclassify as deadlift.\n"
-        "3. Visually verify per-rep form faults: depth, alignment, posture, "
-        "knee tracking, back position.\n"
-        "4. Refine scores and mistakes based on combined angle + visual evidence.\n\n"
-        f"{pass1_summary}"
-        "Here are the joint angles (degrees) and landmark coordinates "
-        "extracted from a workout video:\n\n"
-        f"{angle_text}"
-    )
+    if rep_jpegs:
+        # ── Multimodal: images + angles (primary path) ──
+        prompt = (
+            f"{SYSTEM_PROMPT}\n\n"
+            f"You have {len(rep_jpegs)} mid-rep reference images (one per rep, "
+            "captured at the temporal midpoint of each repetition).\n\n"
+            "CRITICAL — EXERCISE CLASSIFICATION:\n"
+            "Your #1 job is to look at the images and determine the exercise.\n"
+            "Look for: equipment (barbell, dumbbells, bench, rack, cables, "
+            "pull-up bar), body orientation (standing, lying, bent over), "
+            "load placement (bar on back, bar in hands, overhead), and movement "
+            "plane.  The images are the GROUND TRUTH for classification.\n\n"
+            "INSTRUCTIONS:\n"
+            "1. Describe what you see in the images in the \"visual_description\" "
+            "field: body position, equipment, environment, stance, grip, and any "
+            "visible form issues.\n"
+            "2. Classify the exercise based PRIMARILY on what you SEE.\n"
+            "3. Use the rep boundaries below to structure your per-rep analysis.\n"
+            "4. Use the angle data to score form quality and detect biomechanical "
+            "faults for each rep.\n\n"
+            f"{rep_context}"
+            "Joint angles (degrees) and landmark coordinates:\n\n"
+            f"{angle_text}"
+        )
 
-    contents: list = []
-    for i, (_ts, jpeg) in enumerate(rep_jpegs):
-        contents.append(types.Part.from_bytes(data=jpeg, mime_type="image/jpeg"))
-    contents.append(prompt)
+        contents: list = []
+        for _ts, jpeg in rep_jpegs:
+            contents.append(types.Part.from_bytes(data=jpeg, mime_type="image/jpeg"))
+        contents.append(prompt)
 
-    logger.info(
-        "[Pass 2] Sending multimodal request (text + %d rep images, %.1f KB)",
-        len(rep_jpegs), sum(len(b) for _, b in rep_jpegs) / 1024,
-    )
+        logger.info(
+            "[Pass 2] Multimodal primary analysis: text + %d images (%.1f KB)",
+            len(rep_jpegs), sum(len(b) for _, b in rep_jpegs) / 1024,
+        )
+    else:
+        # ── Text-only fallback (no rep images available) ──
+        prompt = (
+            f"{SYSTEM_PROMPT}\n\n"
+            f"{rep_context}"
+            "Here are the joint angles (degrees) and landmark coordinates "
+            "extracted from a workout video:\n\n"
+            f"{angle_text}"
+        )
+        contents = prompt
+        logger.info("[Pass 2] Text-only fallback (%d chars)", len(prompt))
+
     return _gemini_call(contents, tag="Pass 2")
 
 
@@ -650,8 +712,8 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
             len(rep_jpegs), len(rep_analyses),
         )
 
-        # Step E – Pass 2: multimodal Gemini call with mid-rep images
-        analysis = _gemini_pass2(angle_text, rep_jpegs, pass1)
+        # Step E – Pass 2: primary analysis (classification + scoring + faults)
+        analysis = _gemini_pass2(angle_text, rep_jpegs, rep_analyses)
         analysis["rep_frame_timestamps"] = [t for t, _ in rep_jpegs]
 
         # Buffer per-rep frame JPEGs in Redis for frontend display
