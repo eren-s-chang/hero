@@ -68,7 +68,7 @@ LANDMARKS_TTL = 3600  # same as result_expires
 # Gemini config
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 SYSTEM_PROMPT = (
 """ You are the MediaPipe Biomechanical Analysis Engine (MBAE). Your specific purpose is to analyze kinematic data (joint coordinates and angles) combined with visual context to classify exercises, count repetitions, and score movement quality with clinical precision.
