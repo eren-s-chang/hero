@@ -158,7 +158,11 @@ RESPONSE_JSON_SCHEMA = {
           },
           "problem_joints": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": {
+              "type": "string",
+              "enum": ["L_knee", "R_knee", "L_hip", "R_hip", "L_elbow", "R_elbow", "L_shoulder", "R_shoulder", "L_ankle", "R_ankle", "spine"]
+            },
+            "description": "Which angle-joint names had faults in this rep. Use EXACTLY the angle names from the input data."
           },
           "i_i_d_audit_notes": {
             "type": "string",
@@ -181,7 +185,11 @@ RESPONSE_JSON_SCHEMA = {
     },
     "problem_joints": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": {
+        "type": "string",
+        "enum": ["L_knee", "R_knee", "L_hip", "R_hip", "L_elbow", "R_elbow", "L_shoulder", "R_shoulder", "L_ankle", "R_ankle", "spine"]
+      },
+      "description": "Aggregate list of angle-joint names where deviations were detected. Use EXACTLY the angle names from the input data."
     },
     "visual_description": { "type": "string" },
     "actionable_correction": { "type": "string" }
@@ -725,6 +733,30 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
                 logger.warning("Failed to buffer rep frames in Redis: %s", exc)
 
         # Step F – resolve per-rep problem_joints to landmark ranges for frontend
+        # Build a normalisation map so LLM variations ("left knee", "Left_Knee",
+        # "LEFT_KNEE", etc.) still resolve to the canonical ANGLE_TO_LANDMARKS keys.
+        _norm: dict[str, str] = {}
+        for _key in ANGLE_TO_LANDMARKS:
+            _norm[_key] = _key
+            _norm[_key.lower()] = _key
+            _norm[_key.upper()] = _key
+            _norm[_key.lower().replace("_", " ")] = _key
+            _norm[_key.lower().replace("_", "")] = _key
+            # "left knee" / "right knee" etc.
+            _parts = _key.split("_")
+            if len(_parts) == 2:
+                _side = {"l": "left", "r": "right"}.get(_parts[0].lower(), _parts[0].lower())
+                _body = _parts[1].lower()
+                _norm[f"{_side} {_body}"] = _key
+                _norm[f"{_side}_{_body}"] = _key
+                _norm[f"{_side}{_body}"] = _key
+
+        def _resolve_joint(name: str) -> str | None:
+            """Map a (potentially free-form) joint name to its ANGLE_TO_LANDMARKS key."""
+            if name in ANGLE_TO_LANDMARKS:
+                return name
+            return _norm.get(name.strip().lower())
+
         problem_landmark_ranges: list[dict] = []
         global_landmarks_seen: set[str] = set()
         global_problem_landmarks: list[str] = []
@@ -735,7 +767,11 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
                 continue
             rep_landmarks: list[str] = []
             seen: set[str] = set()
-            for joint_name in rep_joints:
+            for raw_joint_name in rep_joints:
+                joint_name = _resolve_joint(raw_joint_name) if isinstance(raw_joint_name, str) else None
+                if not joint_name:
+                    logger.warning("Skipping unrecognised problem_joint: %r", raw_joint_name)
+                    continue
                 for lm_name in ANGLE_TO_LANDMARKS.get(joint_name, []):
                     if lm_name not in seen:
                         rep_landmarks.append(lm_name)
