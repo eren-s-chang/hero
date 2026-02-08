@@ -1,6 +1,5 @@
 import { motion } from "framer-motion";
 import heroImage from "@/assets/hero-exercise.jpg";
-import thinkingBubble from "@/assets/thinking-bubble.png";
 import { ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
@@ -108,17 +107,6 @@ const Hero = () => {
             />
           ))}
         </div>
-
-        {/* Thinking bubble near Saitama's face */}
-        <motion.img
-          src={thinkingBubble}
-          alt="Thinking bubble"
-          className="absolute z-30 w-[120px] sm:w-[160px] md:w-[200px] lg:w-[240px]"
-          style={{ top: '8%', right: '25%' }}
-          initial={{ opacity: 0, scale: 0.5 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6, delay: 1.2, ease: "easeOut" }}
-        />
       </div>
 
       {/* Animated background particles */}
