@@ -15,12 +15,18 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Prepare SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY_B64 }}" | base64 -d > ~/.ssh/vps_key
+          chmod 600 ~/.ssh/vps_key
+
       - name: Deploy to Vultr
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.VPS_HOST }}
           username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
+          key_path: ~/.ssh/vps_key
           script: |
             set -e
             mkdir -p /opt/form-perfect/backend
@@ -32,7 +38,7 @@ jobs:
         with:
           host: ${{ secrets.VPS_HOST }}
           username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
+          key_path: ~/.ssh/vps_key
           source: "backend/,docker-compose.yml"
           target: /opt/form-perfect
           overwrite: true
@@ -42,7 +48,7 @@ jobs:
         with:
           host: ${{ secrets.VPS_HOST }}
           username: root
-          key: ${{ secrets.VPS_SSH_KEY }}
+          key_path: ~/.ssh/vps_key
           script: |
             set -e
             cd /opt/form-perfect
