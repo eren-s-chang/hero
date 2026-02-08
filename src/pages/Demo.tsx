@@ -41,6 +41,106 @@ const Demo = () => {
     setPreviewUrl(null);
   };
 
+  const [processing, setProcessing] = useState(false);
+  const [downsizedFile, setDownsizedFile] = useState<File | null>(null);
+
+  const downscaleVideoTo480 = (file: File): Promise<File> => {
+    return new Promise(async (resolve) => {
+      if (!('MediaRecorder' in window)) return resolve(file);
+
+      const url = URL.createObjectURL(file);
+      const video = document.createElement('video');
+      video.src = url;
+      video.muted = true;
+      video.playsInline = true;
+
+      await new Promise((res) => {
+        const onLoaded = () => {
+          video.removeEventListener('loadedmetadata', onLoaded);
+          res(true);
+        };
+        video.addEventListener('loadedmetadata', onLoaded);
+      });
+
+      const srcWidth = video.videoWidth || 640;
+      const srcHeight = video.videoHeight || 360;
+      const targetHeight = 480;
+      const targetWidth = Math.round((srcWidth / srcHeight) * targetHeight);
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve(file);
+
+      const stream = (canvas as any).captureStream?.(30);
+      if (!stream) return resolve(file);
+
+      const options: any = {};
+      let mime = 'video/webm';
+      if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) mime = 'video/webm;codecs=vp9';
+      else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) mime = 'video/webm;codecs=vp8';
+      options.mimeType = mime;
+
+      const recorder = new MediaRecorder(stream, options);
+      const chunks: Blob[] = [];
+      recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mime });
+        const newName = file.name.replace(/\.[^.]+$/, '') + '-480p.webm';
+        const newFile = new File([blob], newName, { type: mime });
+        URL.revokeObjectURL(url);
+        resolve(newFile);
+      };
+
+      let raf: number | null = null;
+
+      const draw = () => {
+        try {
+          ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+        } catch (e) {
+          // drawing may fail if video not ready
+        }
+        if (!video.paused && !video.ended) raf = requestAnimationFrame(draw);
+      };
+
+      recorder.start(1000);
+      video.currentTime = 0;
+      video.play().catch(() => {
+        // ignore play errors
+      });
+      raf = requestAnimationFrame(draw);
+
+      video.addEventListener('ended', () => {
+        if (raf) cancelAnimationFrame(raf);
+        recorder.stop();
+      });
+
+      // safety: stop after duration if something hangs
+      setTimeout(() => {
+        if (recorder.state !== 'inactive') {
+          try { recorder.stop(); } catch {}
+        }
+      }, (file.size / (1024 * 1024)) * 2000 + 20000); // heuristic timeout
+    });
+  };
+
+  const analyzeFile = async () => {
+    if (!selectedFile) return;
+    setProcessing(true);
+    try {
+      const downsized = await downscaleVideoTo480(selectedFile);
+      // keep the displayed preview as the original file, but store the downsized file for backend processing
+      setDownsizedFile(downsized);
+      console.log('Downsized file ready for backend:', downsized);
+    } catch (err) {
+      console.error('Downscale failed, using original file', err);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   return (
     <main className="bg-background text-foreground min-h-screen relative overflow-hidden">
       {/* Background particles */}
@@ -175,9 +275,11 @@ const Demo = () => {
               <motion.button
                 whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.98 }}
-                className="w-full font-heading bg-secondary text-secondary-foreground py-4 text-2xl uppercase tracking-wider rounded-md hover:bg-secondary/90 transition-colors"
+                onClick={analyzeFile}
+                disabled={processing}
+                className="w-full font-heading bg-secondary text-secondary-foreground py-4 text-2xl uppercase tracking-wider rounded-md hover:bg-secondary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                ANALYZE MY FORM
+                {processing ? 'PROCESSING...' : 'ANALYZE MY FORM'}
               </motion.button>
             </div>
           )}
