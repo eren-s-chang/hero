@@ -162,7 +162,7 @@ RESPONSE_JSON_SCHEMA = {
 PoseLandmark = mp.solutions.pose.PoseLandmark
 LANDMARK_NAMES = [lm.name for lm in PoseLandmark]
 
-TARGET_SAMPLES_PER_SEC = 3  # ~3 snapshots per second of video
+TARGET_SAMPLES_PER_SEC = 10  # ~10 snapshots per second of video
 
 # Joint-angle definitions: (point_a, vertex, point_b)
 # The angle is measured at the *vertex* joint.
@@ -235,7 +235,7 @@ def _process_video(
 
     pose = mp.solutions.pose.Pose(
         static_image_mode=False,
-        model_complexity=0,
+        model_complexity=2,
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
     )
