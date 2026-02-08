@@ -45,8 +45,6 @@ const Demo = () => {
     setPreviewUrl(null);
   };
 
-  const [downsizedFile, setDownsizedFile] = useState<File | null>(null);
-
   const downscaleVideoTo480 = (file: File): Promise<File> => {
     return new Promise(async (resolve) => {
       if (!('MediaRecorder' in window)) return resolve(file);
@@ -133,13 +131,25 @@ const Demo = () => {
     if (!selectedFile) return;
     setProcessing(true);
     try {
-      const downsized = await downscaleVideoTo480(selectedFile);
-      // keep the displayed preview as the original file, but store the downsized file for backend processing
-      setDownsizedFile(downsized);
-      console.log('Downsized file ready for backend:', downsized);
-    } catch (err) {
-      console.error('Downscale failed, using original file', err);
-    } finally {
+      // Downscale to 480p for the backend (smaller upload, faster processing)
+      let fileToUpload: File;
+      try {
+        fileToUpload = await downscaleVideoTo480(selectedFile);
+      } catch {
+        // Fall back to original if downscale fails
+        fileToUpload = selectedFile;
+      }
+
+      const { task_id } = await uploadVideo(fileToUpload);
+
+      // Navigate with the ORIGINAL uncompressed video URL so the
+      // Results page draws pose markers on the full-quality video
+      navigate(`/results/${task_id}`, {
+        state: { videoUrl: previewUrl },
+      });
+    } catch (err: any) {
+      const msg = err?.message || "Upload failed";
+      toast.error(msg);
       setProcessing(false);
     }
   };
@@ -280,9 +290,13 @@ const Demo = () => {
                 whileTap={{ scale: 0.98 }}
                 onClick={analyzeFile}
                 disabled={processing}
-                className="w-full font-heading bg-secondary text-secondary-foreground py-4 text-2xl uppercase tracking-wider rounded-md hover:bg-secondary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="w-full font-heading bg-secondary text-secondary-foreground py-4 text-2xl uppercase tracking-wider rounded-md hover:bg-secondary/90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-3"
               >
-                {processing ? 'PROCESSING...' : 'ANALYZE MY FORM'}
+                {processing ? (
+                  <><Loader2 className="w-6 h-6 animate-spin" /> UPLOADING…</>
+                ) : (
+                  "ANALYZE MY FORM"
+                )}
               </motion.button>
             </div>
           )}
