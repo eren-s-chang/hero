@@ -109,9 +109,17 @@ export default function SkeletonOverlay({
 
       // Build the set of problem landmarks active at this moment
       // by checking which ranges contain the current (downscaled) time.
+      // A small padding is added to compensate for timing drift between
+      // the original video and the downscaled landmark/rep timeline so
+      // that red highlights persist through the entire rep window instead
+      // of flickering.
+      const RANGE_PAD_S = 0.35;
       const problemSet = new Set<string>();
       for (const range of problemRanges) {
-        if (lookupTime >= range.start && lookupTime <= range.end) {
+        if (
+          lookupTime >= range.start - RANGE_PAD_S &&
+          lookupTime <= range.end + RANGE_PAD_S
+        ) {
           for (const lm of range.landmarks) {
             problemSet.add(lm);
           }
