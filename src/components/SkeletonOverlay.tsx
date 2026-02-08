@@ -102,7 +102,8 @@ export default function SkeletonOverlay({
       // differ from the original video shown here.  Map the video's
       // playback time into the landmark timeline so they stay in sync.
       const lastT = frames[frames.length - 1]?.time_s || 0;
-      const vidDur = video.duration || lastT || 1;
+      const rawDur = video.duration;
+      const vidDur = (Number.isFinite(rawDur) && rawDur > 0) ? rawDur : (lastT || 1);
       const scale = lastT > 0 ? lastT / vidDur : 1;
       const lookupTime = video.currentTime * scale;
 
@@ -221,7 +222,7 @@ export default function SkeletonOverlay({
     <canvas
       ref={canvasRef}
       className="absolute inset-0 w-full h-full pointer-events-none"
-      style={{ objectFit: "contain" }}
+      style={{ objectFit: "contain", zIndex: 10, transform: "translateZ(0)" }}
     />
   );
 }
