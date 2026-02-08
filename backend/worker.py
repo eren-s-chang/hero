@@ -71,109 +71,139 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 SYSTEM_PROMPT = (
-""" You are the MediaPipe Biomechanical Analysis Engine (MBAE). Your purpose is to classify only three movements (Push-Up, Deadlift, Squat), count repetitions, and score movement quality with clinical precision.
+""" You are the MediaPipe Biomechanical Analysis Engine (MBAE). Your purpose is to classify (Push-Up, Deadlift, Squat), count repetitions, and provide high-fidelity, individualized auditing.
 
 1. OPERATIONAL CONSTRAINTS
 - Output Format: ONLY valid JSON.
-- Input Handling: You receive time-series joint data and reference images.
-- Independent Auditing (i.i.d.): Treat every identified repetition as an Independent and Identically Distributed (i.i.d.) event. Scrutinize each rep in total isolation from the others; do not let the form of Rep N influence the scoring of Rep N+1.
+- i.i.d. Auditing: Treat every identified repetition as an Independent and Identically Distributed (i.i.d.) event. Evaluate each rep in a vacuum. Do not allow the form of Rep 1 to bias the assessment of Rep 2.
+- Differentiator Rule: If two reps have similar scores, the 'i_i_d_audit_notes' MUST distinguish the unique biomechanical nuance of each failure.
 
 2. HIERARCHY OF TRUTH & SMART REASONING
-- Image > Kinematics: If landmark math suggests a fault (e.g., Sagging Core) but the image shows a straight body line, prioritize the visual context. Attribute math discrepancies to jitter or parallax.
-- Cohesion: A valid rep requires global movement. If the primary joint (elbow/knee) moves but the mass (torso Y) remains static, ignore the signal.
+- Image > Kinematics: If math suggests a fault (e.g., Sagging Core) but visual context shows a straight plank, prioritize the image. Attribute math errors to landmark jitter or Z-depth parallax.
+- Cohesion: A valid rep requires global movement. Primary joint movement (elbow/knee) must be mirrored by a torso Y-coordinate shift.
 
 3. PRE-ANALYSIS GATING
 Set "analysis_allowed" to FALSE if joints are occluded > 40%, confidence is < 0.5, or camera angle is invalid.
 
 4. REPETITION DETECTION (OPEN-LOOP SMART LOGIC)
-Identify reps based on the initiation of an "Unstable" state from "Stability."
-- Start: The moment a sustained directional trend begins.
-- Inflection (The Count): The moment velocity hits zero/reverses at maximum depth.
-- Cutoff Handling: Count a rep once the Inflection point is reached, even if the video ends before returning to a stable state.
-- Isolation: Evaluate the "start-to-inflection" path for each rep independently to determine validity.
+- Trigger: The moment the body becomes 'Unstable' from a stable state.
+- Count Point: The Inflection Point (maximum depth/velocity reversal).
+- Cutoff Handling: Count the rep as soon as Inflection is reached, even if the video ends before returning to start.
 
-5. FORM SCORING & FAULT THRESHOLDS
-Start at 10.0. Deduct for faults persisting > 0.2s. 
-- PUSH-UP: Sagging Hips (-2.5), Partial ROM (-1.5), Elbow Flare (-1.0), Pike (-1.0).
-- SQUAT/DEADLIFT: Depth (-1.5), Valgus (-3.0), Lumbar Rounding (-3.0).
+5. FAULT SEVERITY MATRIX (SCORING)
+Start at 10.0. Apply a Severity Multiplier to every fault:
+- Trace (0.25x): Subtle deviation.
+- Moderate (0.6x): Clear form breakdown.
+- Severe (1.0x): Major structural compromise/injury risk.
+
+A. PUSH-UP: Sagging Hips (-2.5), Partial ROM (-1.5), Elbow Flare (-1.0), Pike (-1.0).
+B. SQUAT/DEADLIFT: Valgus (-3.0), Depth (-1.5), Lumbar Rounding (-3.0).
 
 6. REQUIRED OUTPUT SCHEMA
 {
   "analysis_allowed": boolean,
-  "rejection_reason": "string",
-  "internal_signal_analysis": "2-3 sentence reasoning. Reconcile image vs math and explain how you audited the reps in isolation.",
   "exercise_detected": "Push-Up" | "Squat" | "Deadlift" | "Unknown",
   "rep_count": integer,
-  "form_rating_1_to_10": integer,
-  "main_mistakes": ["string"],
+  "internal_signal_analysis": "Reconcile image vs math. Explain how you audited reps in isolation.",
   "rep_analyses": [
     {
       "rep_number": integer,
       "timestamp_start": number,
       "timestamp_end": number,
-      "rating_1_to_10": integer,
+      "rating_1_to_10": number,
+      "primary_fault_category": "Stability" | "ROM" | "Alignment" | "None",
+      "severity": "Trace" | "Moderate" | "Severe" | "None",
       "mistakes": ["string"],
-      "i_i_d_audit_notes": "Brief note on why this specific isolated rep passed or failed."
+      "i_i_d_audit_notes": "Unique biomechanical observation for THIS specific rep."
     }
   ],
-  "visual_description": "string",
-  "actionable_correction": "string"
+  "actionable_correction": "A single coaching cue targeting the HIGHEST severity fault observed in the set."
 } """
 )
 
 
-RESPONSE_JSON_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "analysis_allowed": {"type": "boolean"},
-        "rejection_reason": {"type": "string"},
-        "exercise_detected": {"type": "string"},
-        "rep_count": {"type": "integer"},
-        "form_rating_1_to_10": {"type": "integer"},
-        "main_mistakes": {
-            "type": "array",
-            "items": {"type": "string"},
-        },
-        "rep_analyses": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "rep_number": {"type": "integer"},
-                    "timestamp_start": {"type": "number"},
-                    "timestamp_end": {"type": "number"},
-                    "rating_1_to_10": {"type": "integer"},
-                    "mistakes": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                    "problem_joints": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                    },
-                },
-                "required": ["rep_number", "timestamp_start", "timestamp_end", "rating_1_to_10", "mistakes", "problem_joints"],
-            },
-        },
-        "problem_joints": {
-            "type": "array",
-            "items": {"type": "string"},
-        },
-        "visual_description": {"type": "string"},
-        "actionable_correction": {"type": "string"},
+{
+  "type": "object",
+  "properties": {
+    "analysis_allowed": { "type": "boolean" },
+    "rejection_reason": { "type": "string" },
+    "internal_signal_analysis": {
+      "type": "string",
+      "description": "2-3 sentence reasoning reconciling image vs math and explaining the independent audit of reps."
     },
-    "required": [
-        "analysis_allowed",
-        "rejection_reason",
-        "exercise_detected",
-        "rep_count",
-        "form_rating_1_to_10",
-        "main_mistakes",
-        "rep_analyses",
-        "problem_joints",
-        "visual_description",
-        "actionable_correction",
-    ],
+    "exercise_detected": {
+      "type": "string",
+      "enum": ["Push-Up", "Squat", "Deadlift", "Unknown"]
+    },
+    "rep_count": { "type": "integer" },
+    "form_rating_1_to_10": { "type": "integer" },
+    "main_mistakes": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "rep_analyses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rep_number": { "type": "integer" },
+          "timestamp_start": { "type": "number" },
+          "timestamp_end": { "type": "number" },
+          "rating_1_to_10": { "type": "number" },
+          "primary_fault_category": {
+            "type": "string",
+            "enum": ["Stability", "ROM", "Alignment", "None"]
+          },
+          "severity": {
+            "type": "string",
+            "enum": ["Trace", "Moderate", "Severe", "None"]
+          },
+          "mistakes": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "problem_joints": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "i_i_d_audit_notes": {
+            "type": "string",
+            "description": "Unique biomechanical observation for this specific isolated rep."
+          }
+        },
+        "required": [
+          "rep_number",
+          "timestamp_start",
+          "timestamp_end",
+          "rating_1_to_10",
+          "primary_fault_category",
+          "severity",
+          "mistakes",
+          "problem_joints",
+          "i_i_d_audit_notes"
+        ]
+      }
+    },
+    "problem_joints": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "visual_description": { "type": "string" },
+    "actionable_correction": { "type": "string" }
+  },
+  "required": [
+    "analysis_allowed",
+    "rejection_reason",
+    "internal_signal_analysis",
+    "exercise_detected",
+    "rep_count",
+    "form_rating_1_to_10",
+    "main_mistakes",
+    "rep_analyses",
+    "problem_joints",
+    "visual_description",
+    "actionable_correction"
+  ]
 }
 
 # Pass 1 schema — minimal, rep detection only (no classification or scoring)
