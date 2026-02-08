@@ -171,6 +171,9 @@ export default function Results() {
   const [audioPlaying, setAudioPlaying] = useState(false);
   const [showSaitamaCoach, setShowSaitamaCoach] = useState(true);
 
+  // Word-level highlight state for karaoke-style sync
+  const [highlightWordIndex, setHighlightWordIndex] = useState<number>(-1);
+
   // ---- Polling loop --------------------------------------------------------
   useEffect(() => {
     if (!taskId) return;
@@ -524,12 +527,30 @@ export default function Results() {
           src={correctionAudioUrl}
           autoPlay={false}
           controls={false}
-          onPlay={() => setAudioPlaying(true)}
+          onPlay={() => {
+            setAudioPlaying(true);
+            setHighlightWordIndex(0);
+          }}
+          onTimeUpdate={() => {
+            const audio = audioRef.current;
+            if (!audio || !audio.duration || !result?.actionable_correction) return;
+            const words = result.actionable_correction.trim().split(/\s+/);
+            const progress = audio.currentTime / audio.duration;
+            const idx = Math.min(
+              Math.floor(progress * words.length),
+              words.length - 1
+            );
+            setHighlightWordIndex(idx);
+          }}
           onEnded={() => {
             setAudioPlaying(false);
+            setHighlightWordIndex(-1);
             setShowSaitamaCoach(false);
           }}
-          onPause={() => setAudioPlaying(false)}
+          onPause={() => {
+            setAudioPlaying(false);
+            setHighlightWordIndex(-1);
+          }}
         />
       )}
 
@@ -613,7 +634,24 @@ export default function Results() {
                   COACH'S TIP
                 </p>
                 <p className="font-modern text-foreground/90 leading-relaxed text-lg">
-                  {result.actionable_correction}
+                  {result.actionable_correction.trim().split(/\s+/).map((word, i) => (
+                    <span
+                      key={i}
+                      className="transition-colors duration-150"
+                      style={{
+                        backgroundColor:
+                          audioPlaying && i === highlightWordIndex
+                            ? "rgba(250, 204, 21, 0.45)"
+                            : audioPlaying && i < highlightWordIndex
+                            ? "rgba(250, 204, 21, 0.15)"
+                            : "transparent",
+                        borderRadius: "3px",
+                        padding: "0 2px",
+                      }}
+                    >
+                      {word}{" "}
+                    </span>
+                  ))}
                 </p>
               </div>
             </motion.div>
