@@ -548,7 +548,7 @@ export default function Results() {
                 <SkeletonOverlay
                   videoRef={videoRef}
                   frames={frames}
-                  problemLandmarks={result.problem_landmarks}
+                  problemRanges={result.problem_landmark_ranges}
                 />
               )}
             </div>

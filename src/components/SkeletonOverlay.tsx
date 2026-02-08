@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { LandmarkFrame } from "@/lib/api";
+import type { LandmarkFrame, ProblemLandmarkRange } from "@/lib/api";
 
 // MediaPipe Pose connections for drawing the skeleton
 const POSE_CONNECTIONS: [string, string][] = [
@@ -39,8 +39,8 @@ interface SkeletonOverlayProps {
   frames: LandmarkFrame[];
   /** HSL color string, e.g. "48 90% 55%" */
   color?: string;
-  /** Landmark names to highlight in red (most problematic joints) */
-  problemLandmarks?: string[];
+  /** Time-ranged problem landmark highlights — red only during each range */
+  problemRanges?: ProblemLandmarkRange[];
 }
 
 /** Binary search for the frame closest to `time`. */
@@ -72,7 +72,7 @@ export default function SkeletonOverlay({
   videoRef,
   frames,
   color = "48 90% 55%",
-  problemLandmarks = [],
+  problemRanges = [],
 }: SkeletonOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -98,10 +98,6 @@ export default function SkeletonOverlay({
 
       ctx.clearRect(0, 0, w, h);
 
-      // Set of landmark names that should be highlighted in red
-      const problemSet = new Set(problemLandmarks);
-      const RED = "0 85% 55%";
-
       // The backend analysed the *downscaled* video whose duration may
       // differ from the original video shown here.  Map the video's
       // playback time into the landmark timeline so they stay in sync.
@@ -109,6 +105,18 @@ export default function SkeletonOverlay({
       const vidDur = video.duration || lastT || 1;
       const scale = lastT > 0 ? lastT / vidDur : 1;
       const lookupTime = video.currentTime * scale;
+
+      // Build the set of problem landmarks active at this moment
+      // by checking which ranges contain the current (downscaled) time.
+      const problemSet = new Set<string>();
+      for (const range of problemRanges) {
+        if (lookupTime >= range.start && lookupTime <= range.end) {
+          for (const lm of range.landmarks) {
+            problemSet.add(lm);
+          }
+        }
+      }
+      const RED = "0 85% 55%";
 
       const frame = findClosestFrame(frames, lookupTime);
       if (!frame) {
@@ -207,7 +215,7 @@ export default function SkeletonOverlay({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [frames, color, videoRef, problemLandmarks]);
+  }, [frames, color, videoRef, problemRanges]);
 
   return (
     <canvas

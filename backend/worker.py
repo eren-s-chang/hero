@@ -107,10 +107,10 @@ SYSTEM_PROMPT = (
 "  • rep_count  (integer – derived from the count of concentric/eccentric peaks)\n"
 "  • form_rating_1_to_10  (integer – global average based on the Hierarchy of Errors above)\n"
 "  • main_mistakes  (list of strings – specific deviations from the Optimal Angles)\n"
-"  • rep_analyses  (list of objects, one per rep, containing rep_number, timestamp_start, timestamp_end, rating_1_to_10, and mistakes)\n"
-"  • problem_joints  (list of strings – the angle names (from the input data columns) that have the WORST form deviations, "
-"ordered from most problematic to least. Use the EXACT column names from the input like 'L_knee', 'R_hip', 'spine', etc. "
-"Include 1-3 joints maximum – only those with Critical or Major faults.)\n"
+"  • rep_analyses  (list of objects, one per rep, containing rep_number, timestamp_start, timestamp_end, rating_1_to_10, mistakes, "
+"and problem_joints – a list of 0-3 angle column names that have the WORST deviations IN THAT SPECIFIC REP. "
+"Use the EXACT column names from the input like 'L_knee', 'R_hip', 'spine', etc. Only include joints with Critical or Major faults for that rep.)\n"
+"  • problem_joints  (list of strings – the GLOBAL union of all per-rep problem_joints, ordered from most problematic to least. 1-3 joints maximum.)\n"
 "  • actionable_correction  (string – the single most impactful fix for the Critical or Major faults)\n"
 "If analysis_allowed is false, set exercise_detected to 'unrecognized', rep_count to 0, "
 "form_rating_1_to_10 to 0, main_mistakes to [], rep_analyses to [], and provide a short correction.\n"
@@ -142,8 +142,12 @@ RESPONSE_JSON_SCHEMA = {
                         "type": "array",
                         "items": {"type": "string"},
                     },
+                    "problem_joints": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
                 },
-                "required": ["rep_number", "timestamp_start", "timestamp_end", "rating_1_to_10", "mistakes"],
+                "required": ["rep_number", "timestamp_start", "timestamp_end", "rating_1_to_10", "mistakes", "problem_joints"],
             },
         },
         "problem_joints": {
@@ -446,17 +450,38 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
         logger.info("Step C: sending %d chars of angle data to Gemini", len(angle_text))
         analysis = _interpret_with_gemini(angle_text)
 
-        # Step D – resolve problem_joints to actual landmark names for frontend
-        problem_joints = analysis.get("problem_joints", [])
-        problem_landmarks: list[str] = []
-        seen = set()
-        for joint_name in problem_joints:
-            for lm_name in ANGLE_TO_LANDMARKS.get(joint_name, []):
-                if lm_name not in seen:
-                    problem_landmarks.append(lm_name)
-                    seen.add(lm_name)
-        analysis["problem_landmarks"] = problem_landmarks
-        logger.info("Problem joints: %s → landmarks: %s", problem_joints, problem_landmarks)
+        # Step D – resolve per-rep problem_joints to landmark ranges for frontend
+        problem_landmark_ranges: list[dict] = []
+        global_landmarks_seen: set[str] = set()
+        global_problem_landmarks: list[str] = []
+
+        for rep in analysis.get("rep_analyses", []):
+            rep_joints = rep.get("problem_joints", [])
+            if not rep_joints:
+                continue
+            rep_landmarks: list[str] = []
+            seen: set[str] = set()
+            for joint_name in rep_joints:
+                for lm_name in ANGLE_TO_LANDMARKS.get(joint_name, []):
+                    if lm_name not in seen:
+                        rep_landmarks.append(lm_name)
+                        seen.add(lm_name)
+                    if lm_name not in global_landmarks_seen:
+                        global_problem_landmarks.append(lm_name)
+                        global_landmarks_seen.add(lm_name)
+            if rep_landmarks:
+                problem_landmark_ranges.append({
+                    "start": rep.get("timestamp_start", 0),
+                    "end": rep.get("timestamp_end", 0),
+                    "landmarks": rep_landmarks,
+                })
+
+        analysis["problem_landmark_ranges"] = problem_landmark_ranges
+        analysis["problem_landmarks"] = global_problem_landmarks
+        logger.info(
+            "Problem landmark ranges: %d ranges, global landmarks: %s",
+            len(problem_landmark_ranges), global_problem_landmarks,
+        )
 
         return analysis
 

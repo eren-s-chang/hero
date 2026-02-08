@@ -18,6 +18,13 @@ export interface RepAnalysis {
   timestamp_end: number;
   rating_1_to_10: number;
   mistakes: string[];
+  problem_joints?: string[];
+}
+
+export interface ProblemLandmarkRange {
+  start: number;
+  end: number;
+  landmarks: string[];
 }
 
 export interface AnalysisResult {
@@ -30,6 +37,7 @@ export interface AnalysisResult {
   rep_analyses: RepAnalysis[];
   problem_joints?: string[];
   problem_landmarks?: string[];
+  problem_landmark_ranges?: ProblemLandmarkRange[];
   actionable_correction: string;
 }
 
