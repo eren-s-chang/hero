@@ -179,13 +179,20 @@ async def rep_frame(task_id: str, index: int):
 
     payload = json.loads(data)
     
-    # Flatten all frames from all reps into a single list for backward compatibility
+    # Support both data formats:
+    # Old/current format: [{"t": ..., "b64": "..."}, ...]
+    # New format: [{"rep_number": 1, "frames": {"start": {...}, "mid": {...}, "end": {...}}}, ...]
     flat_frames = []
-    for rep_data in payload:
-        # Order: start, mid, end for each rep
-        for frame_type in ["start", "mid", "end"]:
-            if frame_type in rep_data.get("frames", {}):
-                flat_frames.append(rep_data["frames"][frame_type])
+    if payload and isinstance(payload[0], dict):
+        if "b64" in payload[0]:
+            # Old flat format – each item is already a frame
+            flat_frames = payload
+        elif "frames" in payload[0]:
+            # New nested format – flatten start/mid/end per rep
+            for rep_data in payload:
+                for frame_type in ["start", "mid", "end"]:
+                    if frame_type in rep_data.get("frames", {}):
+                        flat_frames.append(rep_data["frames"][frame_type])
     
     if index < 0 or index >= len(flat_frames):
         raise HTTPException(
