@@ -87,7 +87,17 @@ export default function SkeletonOverlay({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    let lastDrawnTime = -1;
+
     const draw = () => {
+      // Skip redraw if the video time hasn't changed (paused, same frame)
+      const curTime = video.currentTime;
+      if (curTime === lastDrawnTime) {
+        rafRef.current = requestAnimationFrame(draw);
+        return;
+      }
+      lastDrawnTime = curTime;
+
       const w = video.videoWidth || video.clientWidth;
       const h = video.videoHeight || video.clientHeight;
 
@@ -162,57 +172,90 @@ export default function SkeletonOverlay({
       ctx.restore();
 
       // ── Pass 2: Bright colored lines with glow ────────────────────
+      // Draw normal edges first (single shadow state), then problem edges.
       ctx.save();
       ctx.lineWidth = 4;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
+      ctx.shadowColor = `hsl(${color} / 0.8)`;
+      ctx.shadowBlur = 8;
+      ctx.strokeStyle = `hsl(${color})`;
       for (const [a, b] of POSE_CONNECTIONS) {
         const la = lmMap.get(a);
         const lb = lmMap.get(b);
-        if (la && lb) {
-          const isProblem = isEdgeProblem(a, b);
-          const edgeColor = isProblem ? RED : color;
-          ctx.shadowColor = `hsl(${edgeColor} / 0.8)`;
-          ctx.shadowBlur = isProblem ? 20 : 14;
-          ctx.strokeStyle = `hsl(${edgeColor})`;
+        if (la && lb && !isEdgeProblem(a, b)) {
           ctx.beginPath();
           ctx.moveTo(la.x * w, la.y * h);
           ctx.lineTo(lb.x * w, lb.y * h);
           ctx.stroke();
         }
       }
+      // Problem edges with red glow
+      if (problemSet.size > 0) {
+        ctx.shadowColor = `hsl(${RED} / 0.8)`;
+        ctx.shadowBlur = 12;
+        ctx.strokeStyle = `hsl(${RED})`;
+        for (const [a, b] of POSE_CONNECTIONS) {
+          const la = lmMap.get(a);
+          const lb = lmMap.get(b);
+          if (la && lb && isEdgeProblem(a, b)) {
+            ctx.beginPath();
+            ctx.moveTo(la.x * w, la.y * h);
+            ctx.lineTo(lb.x * w, lb.y * h);
+            ctx.stroke();
+          }
+        }
+      }
       ctx.restore();
 
       // ── Pass 3: Joint dots ────────────────────────────────────────
+      // Separate joints into normal vs problem to batch shadow state changes.
       ctx.save();
+      ctx.shadowColor = `hsl(${color} / 0.8)`;
+      ctx.shadowBlur = 6;
       for (const [name, lm] of lmMap) {
+        if (problemSet.has(name)) continue; // draw problem joints in next batch
         const isKey = KEY_JOINTS.has(name);
-        const isProblem = problemSet.has(name);
-        const jointColor = isProblem ? RED : color;
-        const radius = isProblem ? 9 : isKey ? 7 : 4;
+        const radius = isKey ? 7 : 4;
 
-        ctx.shadowColor = `hsl(${jointColor} / 0.8)`;
-        ctx.shadowBlur = isProblem ? 22 : 10;
-
-        // Dark outline ring
-        ctx.fillStyle = isProblem ? "rgba(80, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.6)";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
         ctx.beginPath();
         ctx.arc(lm.x * w, lm.y * h, radius + 2, 0, Math.PI * 2);
         ctx.fill();
 
-        // Bright fill
-        ctx.fillStyle = `hsl(${jointColor})`;
+        ctx.fillStyle = `hsl(${color})`;
         ctx.beginPath();
         ctx.arc(lm.x * w, lm.y * h, radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // White center highlight on key joints / problem joints
-        if (isKey || isProblem) {
-          ctx.fillStyle = isProblem
-            ? "rgba(255, 255, 255, 0.8)"
-            : "rgba(255, 255, 255, 0.6)";
+        if (isKey) {
+          ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
           ctx.beginPath();
-          ctx.arc(lm.x * w, lm.y * h, isProblem ? 4 : 3, 0, Math.PI * 2);
+          ctx.arc(lm.x * w, lm.y * h, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      // Problem joints batch
+      if (problemSet.size > 0) {
+        ctx.shadowColor = `hsl(${RED} / 0.8)`;
+        ctx.shadowBlur = 12;
+        for (const name of problemSet) {
+          const lm = lmMap.get(name);
+          if (!lm) continue;
+
+          ctx.fillStyle = "rgba(80, 0, 0, 0.7)";
+          ctx.beginPath();
+          ctx.arc(lm.x * w, lm.y * h, 11, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = `hsl(${RED})`;
+          ctx.beginPath();
+          ctx.arc(lm.x * w, lm.y * h, 9, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+          ctx.beginPath();
+          ctx.arc(lm.x * w, lm.y * h, 4, 0, Math.PI * 2);
           ctx.fill();
         }
       }
