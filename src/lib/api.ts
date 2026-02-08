@@ -28,6 +28,8 @@ export interface AnalysisResult {
   form_rating_1_to_10: number;
   main_mistakes: string[];
   rep_analyses: RepAnalysis[];
+  problem_joints?: string[];
+  problem_landmarks?: string[];
   actionable_correction: string;
 }
 

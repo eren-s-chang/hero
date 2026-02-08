@@ -71,46 +71,49 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
 SYSTEM_PROMPT = (
-   "You are an elite Fitness Coach and Biomechanics Analyst. "
+   "You are an elite Biomechanical Signal Processing Expert and Strength Coach. "
 "You will receive a time-series of computed joint angles (in degrees) "
-"sampled from a workout video. Each line is one sampled frame with "
-"the timestamp and joint angles.\n\n"
+"sampled from a workout video. Each line is one sampled frame.\n\n"
 
-"PHASE 1: CLASSIFICATION & FILTERING\n"
-"Determine if the video depicts a common gym/fitness exercise with "
-"clearly observable reps (full cycles of movement). Sports activities do NOT count "
-"as common fitness exercises. Reject if the motion is a sport (e.g., basketball, "
-"soccer, tennis, running, cycling, swimming, martial arts), dancing, "
-"or if there is no clear rep-based movement you can count from the joint angles.\n\n"
+"PHASE 1: SIGNAL CLEANING & SEGMENTATION\n"
+"1. Scan the time-series to identify the 'Active Work Set'. Ignore the first and last 10-15% of frames "
+"if they represent setup (walking to position) or teardown (racking weights). Only analyze the periodic signal in the middle.\n"
+"2. Identify local minima and maxima in the joint angles to count reps. A valid rep MUST have a distinct Eccentric (lowering) "
+"and Concentric (lifting) phase. If the signal is chaotic or non-periodic, set 'analysis_allowed' to false.\n\n"
 
-"PHASE 2: BIOMECHANICAL ANALYSIS (The 'Rubric')\n"
-"If an exercise is detected (e.g., Squat, Bicep Curl, Lateral Raise):\n"
-"1. Internally establish the 'Optimal Biomechanical Model' for that specific exercise. "
-"Define the specific target joint angles for the start, concentric peak, and eccentric return "
-"(e.g., for a Squat: Hip Flexion > 90deg, neutral spine angle; for a Curl: Elbow Flexion peak > 130deg).\n"
-"2. Analyze the user's data against this rigid rubric. Do not arbitrarily guess the rating.\n"
-"3. Calculate the form_rating_1_to_10 based on the magnitude of deviation from these optimal angles. "
-"   - 10: Angles match the optimal model within a 5% margin of error.\n"
-"   - 8-9: Minor deviations in non-critical joints.\n"
-"   - 5-7: Major deviation in Range of Motion (ROM) or stability.\n"
-"   - 1-4: Dangerous mechanical deviations or complete failure to hit target angles.\n\n"
+"PHASE 2: KINEMATIC FINGERPRINTING (The 'What')\n"
+"Classify the exercise by analyzing 'Joint Coupling' (how joints move relative to each other):\n"
+"   - SQUAT PATTERN: Knee Flexion and Hip Flexion are COUPLED (move in-phase together). High ROM for both.\n"
+"   - HINGE/DEADLIFT PATTERN: Hip Flexion is DOMINANT. Knee Flexion is subordinate (<40% of Hip ROM).\n"
+"   - LUNGE PATTERN: Asymmetrical Hip/Knee angles (if split data provided) or similar to squat but with stability noise.\n"
+"   - PRESS PATTERN: Elbow Extension coupled with Shoulder Flexion/Abduction.\n"
+"   - PULL PATTERN: Elbow Flexion coupled with Shoulder Extension/Adduction.\n"
+"   - ISOLATION: One joint has High ROM (Primary Mover), adjacent joints are STATIC (Stabilizers).\n"
+"Reject analysis if the motion matches a Sport (tennis, running), Cardio, or Dance.\n\n"
 
-"PHASE 3: OUTPUT\n"
+"PHASE 3: BIOMECHANICAL SCORING (The 'How')\n"
+"If an exercise is detected, compare the user's angles to the 'Bio-Mechanical Ideal' for that SPECIFIC movement.\n"
+"Score strictly using this Hierarchy of Errors:\n"
+"1. CRITICAL FAULT (Max Score: 3/10): Safety violation. (e.g., Lumbar spine flexion in a Deadlift, Knee valgus in a Squat).\n"
+"2. MAJOR FAULT (Max Score: 6/10): Range of Motion failure. (e.g., Squat depth < 90deg knee flexion, half-reps).\n"
+"3. MINOR FAULT (Max Score: 8/10): Efficiency leaks. (e.g., Elbow drift in a Curl, looking up/down excessively).\n"
+"4. OPTIMAL (Score: 9-10/10): Angles align with the Ideal Model within 5% variance.\n\n"
+
+"PHASE 4: OUTPUT GENERATION\n"
 "Analyze the data and output **strictly valid JSON** with:\n"
-"  • analysis_allowed  (boolean – true only if this is a common gym/fitness exercise "
-"with clear, countable reps)\n"
-"  • rejection_reason  (string – if analysis_allowed is false, explain briefly why; "
-"otherwise return an empty string)\n"
+"  • analysis_allowed  (boolean – true only if a periodic gym exercise is found)\n"
+"  • rejection_reason  (string – if false, explain why based on signal noise or sport detection)\n"
 "  • exercise_detected  (string)\n"
-"  • rep_count  (integer – total reps detected, 0 if not a rep-based exercise)\n"
-"  • form_rating_1_to_10  (integer 1-10 – global average across the whole set, calculated via angle deviations)\n"
-"  • main_mistakes  (list of strings – most common form errors derived from specific angle failures)\n"
-"  • rep_analyses  (list of objects, one per rep, each with rep_number, "
-"timestamp_start, timestamp_end, rating_1_to_10, and mistakes)\n"
-"  • actionable_correction  (string – single most impactful cue to fix the specific angle deviation)\n"
+"  • rep_count  (integer – derived from the count of concentric/eccentric peaks)\n"
+"  • form_rating_1_to_10  (integer – global average based on the Hierarchy of Errors above)\n"
+"  • main_mistakes  (list of strings – specific deviations from the Optimal Angles)\n"
+"  • rep_analyses  (list of objects, one per rep, containing rep_number, timestamp_start, timestamp_end, rating_1_to_10, and mistakes)\n"
+"  • problem_joints  (list of strings – the angle names (from the input data columns) that have the WORST form deviations, "
+"ordered from most problematic to least. Use the EXACT column names from the input like 'L_knee', 'R_hip', 'spine', etc. "
+"Include 1-3 joints maximum – only those with Critical or Major faults.)\n"
+"  • actionable_correction  (string – the single most impactful fix for the Critical or Major faults)\n"
 "If analysis_allowed is false, set exercise_detected to 'unrecognized', rep_count to 0, "
-"form_rating_1_to_10 to 0, main_mistakes to [], rep_analyses to [], and provide a short "
-"actionable_correction about uploading a clear rep-based gym exercise.\n"
+"form_rating_1_to_10 to 0, main_mistakes to [], rep_analyses to [], and provide a short correction.\n"
 "Do NOT wrap the JSON in markdown code-fences. Return raw JSON only."
 )
 
@@ -143,6 +146,10 @@ RESPONSE_JSON_SCHEMA = {
                 "required": ["rep_number", "timestamp_start", "timestamp_end", "rating_1_to_10", "mistakes"],
             },
         },
+        "problem_joints": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
         "actionable_correction": {"type": "string"},
     },
     "required": [
@@ -153,6 +160,7 @@ RESPONSE_JSON_SCHEMA = {
         "form_rating_1_to_10",
         "main_mistakes",
         "rep_analyses",
+        "problem_joints",
         "actionable_correction",
     ],
 }
@@ -180,6 +188,12 @@ ANGLE_DEFS: dict[str, tuple[PoseLandmark, PoseLandmark, PoseLandmark]] = {
     "R_ankle":     (PoseLandmark.RIGHT_KNEE,      PoseLandmark.RIGHT_ANKLE,    PoseLandmark.RIGHT_FOOT_INDEX),
     "spine":       (PoseLandmark.LEFT_SHOULDER,    PoseLandmark.LEFT_HIP,       PoseLandmark.LEFT_KNEE),
     # ↑ spine forward lean approximated via shoulder-hip-knee on the left side
+}
+
+# Map angle names → landmark names involved (used by frontend to highlight in red)
+ANGLE_TO_LANDMARKS: dict[str, list[str]] = {
+    name: [PoseLandmark(a).name, PoseLandmark(v).name, PoseLandmark(b).name]
+    for name, (a, v, b) in ANGLE_DEFS.items()
 }
 
 
@@ -431,6 +445,18 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
         # Step C – interpret with Gemini
         logger.info("Step C: sending %d chars of angle data to Gemini", len(angle_text))
         analysis = _interpret_with_gemini(angle_text)
+
+        # Step D – resolve problem_joints to actual landmark names for frontend
+        problem_joints = analysis.get("problem_joints", [])
+        problem_landmarks: list[str] = []
+        seen = set()
+        for joint_name in problem_joints:
+            for lm_name in ANGLE_TO_LANDMARKS.get(joint_name, []):
+                if lm_name not in seen:
+                    problem_landmarks.append(lm_name)
+                    seen.add(lm_name)
+        analysis["problem_landmarks"] = problem_landmarks
+        logger.info("Problem joints: %s → landmarks: %s", problem_joints, problem_landmarks)
 
         return analysis
 
