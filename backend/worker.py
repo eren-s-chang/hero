@@ -121,8 +121,7 @@ B. SQUAT/DEADLIFT: Valgus (-3.0), Depth (-1.5), Lumbar Rounding (-3.0).
 } """
 )
 
-
-{
+RESPONSE_JSON_SCHEMA = {
   "type": "object",
   "properties": {
     "analysis_allowed": { "type": "boolean" },
