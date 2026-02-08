@@ -21,6 +21,7 @@ import os
 import re
 import subprocess
 import tempfile
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -307,11 +308,20 @@ def _angle_between(a, vertex, b) -> float:
 
 
 def _compute_angles(landmarks) -> dict[str, float]:
-    """Compute all defined joint angles from a single frame's landmarks."""
+    """Compute all defined joint angles from a single frame's landmarks using a median filter."""
     lm = landmarks.landmark
     angles: dict[str, float] = {}
     for name, (a_idx, v_idx, b_idx) in ANGLE_DEFS.items():
-        angles[name] = round(_angle_between(lm[a_idx], lm[v_idx], lm[b_idx]), 1)
+        current_angle = _angle_between(lm[a_idx], lm[v_idx], lm[b_idx])
+
+        # Maintain a history of recent angles for this joint
+        if name not in _angle_history:
+            _angle_history[name] = deque(maxlen=MEDIAN_WINDOW_SIZE)
+        _angle_history[name].append(current_angle)
+
+        # Compute the median of the recent angles
+        angles[name] = round(sorted(_angle_history[name])[len(_angle_history[name]) // 2], 1)
+
     return angles
 
 
