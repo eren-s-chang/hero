@@ -77,7 +77,7 @@ You are the MediaPipe Biomechanical Analysis Engine (MBAE). Your specific purpos
 ### 1. OPERATIONAL CONSTRAINTS
 - **Output Format:** You must output ONLY valid JSON. Do not include markdown formatting (like ```json), conversational text, or explanations outside the JSON structure.
 - **Input Handling:** You will receive a time-series of joint angles with landmark coordinates, AND one reference image per rep.
-- **Reference Images:** The attached images are **apex-of-effort frames** — one per rep, captured at the moment of maximum joint displacement from resting position (e.g., bottom of a squat, top of a curl, deepest hinge). Use them to:
+- **Reference Images:** The attached images are **mid-rep reference frames** — one per rep, captured at the temporal midpoint of each repetition. Use them to:
   • Confirm or correct the exercise classification (equipment, stance, grip, body orientation)
   • Identify visual cues not captured by angles alone (e.g., loaded barbell = heavier exercise variant, bench = bench press)
   • Assess camera angle quality for gating decisions
@@ -339,7 +339,7 @@ def _compute_angles(landmarks) -> dict[str, float]:
 
 def _process_video(
     video_path: str, angle_every_n: int | None = None
-) -> tuple[str, list[dict[str, Any]], list[dict]]:
+) -> tuple[str, list[dict[str, Any]]]:
     """Run MediaPipe on *every* frame for smooth frontend overlay,
     but only compute joint angles on sampled frames for the LLM.
 
@@ -350,9 +350,6 @@ def _process_video(
     raw_frames : list[dict]
         Per-frame raw landmark data (every frame) for the frontend overlay.
         Each dict: {"time_s": float, "landmarks": [{name, x, y, z}, ...]}
-    sampled_entries : list[dict]
-        Per-sampled-frame data for apex detection.  Each dict has
-        "timestamp_s", "displacement" (from resting angles), "frame_idx".
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -376,10 +373,6 @@ def _process_video(
     angle_lines: list[str] = []
     raw_frames: list[dict[str, Any]] = []
     frame_idx = 0
-
-    # Track displacement from resting pose for apex-of-effort detection
-    baseline_angles: dict[str, float] | None = None
-    sampled_entries: list[dict] = []
 
     try:
         while True:
@@ -418,21 +411,6 @@ def _process_video(
                         + " ".join(coord_parts)
                     )
 
-                    # ── Track displacement from resting pose ──────
-                    if baseline_angles is None:
-                        baseline_angles = angles.copy()
-                        displacement = 0.0
-                    else:
-                        displacement = sum(
-                            abs(angles[k] - baseline_angles[k])
-                            for k in angles
-                        )
-                    sampled_entries.append({
-                        "timestamp_s": timestamp_s,
-                        "displacement": displacement,
-                        "frame_idx": frame_idx,
-                    })
-
             frame_idx += 1
     finally:
         cap.release()
@@ -450,83 +428,50 @@ def _process_video(
     )
 
     logger.info(
-        "Processed %d frames → %d landmark frames, %d angle samples, %d sampled entries",
-        frame_idx, len(raw_frames), len(angle_lines), len(sampled_entries),
+        "Processed %d frames → %d landmark frames, %d angle samples",
+        frame_idx, len(raw_frames), len(angle_lines),
     )
-    return header + "\n" + "\n".join(angle_lines), raw_frames, sampled_entries
+    return header + "\n" + "\n".join(angle_lines), raw_frames
 
 
-def _pick_rep_apex_frames(
-    sampled_entries: list[dict],
+def _extract_rep_midframes(
+    video_path: str,
     rep_analyses: list[dict],
-) -> list[dict]:
-    """For each rep, find the sampled frame with the highest displacement
-    within that rep's [timestamp_start, timestamp_end] window.
-
-    Returns one entry per rep (guaranteed 1:1), ordered by rep number.
-    Reps with no sampled frames in their window are skipped.
-    """
-    if not sampled_entries or not rep_analyses:
-        return []
-
-    apex_entries: list[dict] = []
-    for rep in sorted(rep_analyses, key=lambda r: r.get("rep_number", 0)):
-        t_start = rep.get("timestamp_start", 0)
-        t_end = rep.get("timestamp_end", 0)
-
-        # Filter sampled entries within this rep's time window
-        window = [
-            e for e in sampled_entries
-            if t_start <= e["timestamp_s"] <= t_end
-        ]
-        if not window:
-            # Expand window slightly (±0.15s) in case of rounding
-            window = [
-                e for e in sampled_entries
-                if (t_start - 0.15) <= e["timestamp_s"] <= (t_end + 0.15)
-            ]
-        if window:
-            best = max(window, key=lambda e: e["displacement"])
-            apex_entries.append(best)
-
-    logger.info(
-        "Picked %d apex frames for %d reps from %d sampled entries",
-        len(apex_entries), len(rep_analyses), len(sampled_entries),
-    )
-    return apex_entries
-
-
-def _extract_apex_jpegs(
-    video_path: str, apex_entries: list[dict],
 ) -> list[tuple[float, bytes]]:
-    """Re-read the video at specific frame indices and encode as JPEG.
+    """For each rep, extract the video frame at the temporal midpoint.
 
-    Returns list of (timestamp_s, jpeg_bytes) tuples.
+    Returns list of (mid_timestamp_s, jpeg_bytes) tuples — one per rep.
     """
-    if not apex_entries:
+    if not rep_analyses:
         return []
 
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        logger.warning("Cannot re-open video for apex frame extraction")
+        logger.warning("Cannot re-open video for mid-rep frame extraction")
         return []
 
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     results: list[tuple[float, bytes]] = []
     try:
-        for entry in apex_entries:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, entry["frame_idx"])
+        for rep in sorted(rep_analyses, key=lambda r: r.get("rep_number", 0)):
+            t_start = rep.get("timestamp_start", 0)
+            t_end = rep.get("timestamp_end", 0)
+            mid_t = (t_start + t_end) / 2.0
+            frame_idx = round(mid_t * fps)
+
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, bgr = cap.read()
             if ret:
                 ok, buf = cv2.imencode(
                     ".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, 80],
                 )
                 if ok:
-                    results.append((entry["timestamp_s"], buf.tobytes()))
+                    results.append((round(mid_t, 3), buf.tobytes()))
     finally:
         cap.release()
 
     logger.info(
-        "Extracted %d apex-of-effort JPEGs (%.1f KB total)",
+        "Extracted %d mid-rep JPEGs (%.1f KB total)",
         len(results), sum(len(b) for _, b in results) / 1024,
     )
     return results
@@ -621,12 +566,12 @@ def _gemini_pass1(angle_text: str) -> dict[str, Any]:
 
 def _gemini_pass2(
     angle_text: str,
-    apex_jpegs: list[tuple[float, bytes]],
+    rep_jpegs: list[tuple[float, bytes]],
     pass1_result: dict[str, Any],
 ) -> dict[str, Any]:
-    """Pass 2 — multimodal.  Re-send angles + per-rep apex-of-effort images
+    """Pass 2 — multimodal.  Re-send angles + per-rep mid-rep images
     so Gemini can visually verify and refine the analysis from Pass 1."""
-    if not apex_jpegs:
+    if not rep_jpegs:
         return pass1_result
 
     # Build a short summary of Pass 1 to give Gemini context
@@ -640,10 +585,11 @@ def _gemini_pass2(
     prompt = (
         f"{SYSTEM_PROMPT}\n\n"
         "You previously analyzed this data using angles only. Now you also have "
-        f"{len(apex_jpegs)} apex-of-effort images (one per rep, at peak joint "
-        "displacement from resting). Use them to visually verify and refine your "
-        "analysis. Correct any errors — especially exercise classification, "
-        "depth assessment, and form faults that are visually apparent.\n\n"
+        f"{len(rep_jpegs)} mid-rep reference images (one per rep, captured at "
+        "the temporal midpoint of each repetition). Use them to visually verify "
+        "and refine your analysis. Correct any errors — especially exercise "
+        "classification, depth assessment, and form faults that are visually "
+        "apparent.\n\n"
         f"{pass1_summary}"
         "Here are the joint angles (degrees) and landmark coordinates "
         "extracted from a workout video:\n\n"
@@ -651,13 +597,13 @@ def _gemini_pass2(
     )
 
     contents: list = []
-    for i, (_ts, jpeg) in enumerate(apex_jpegs):
+    for i, (_ts, jpeg) in enumerate(rep_jpegs):
         contents.append(types.Part.from_bytes(data=jpeg, mime_type="image/jpeg"))
     contents.append(prompt)
 
     logger.info(
-        "[Pass 2] Sending multimodal request (text + %d apex images, %.1f KB)",
-        len(apex_jpegs), sum(len(b) for _, b in apex_jpegs) / 1024,
+        "[Pass 2] Sending multimodal request (text + %d rep images, %.1f KB)",
+        len(rep_jpegs), sum(len(b) for _, b in rep_jpegs) / 1024,
     )
     return _gemini_call(contents, tag="Pass 2")
 
@@ -708,9 +654,9 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
         # Convert WebM/other formats to MP4 for reliable OpenCV decoding
         mp4_path = _ensure_mp4(tmp_path)
 
-        # Step A – extract joint angles + raw landmarks + displacement data
+        # Step A – extract joint angles + raw landmarks
         logger.info("Step A: processing video %s", mp4_path.name)
-        angle_text, raw_frames, sampled_entries = _process_video(str(mp4_path))
+        angle_text, raw_frames = _process_video(str(mp4_path))
 
         # Step B – buffer raw landmarks in Redis for frontend overlay
         task_id = self.request.id
@@ -728,33 +674,32 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
         # Step C – Pass 1: text-only Gemini call to get rep timestamps
         pass1 = _gemini_pass1(angle_text)
 
-        # Step D – pick per-rep apex frames using Pass 1's rep timestamps
+        # Step D – extract mid-rep frames using Pass 1's rep timestamps
         rep_analyses = pass1.get("rep_analyses", [])
-        apex_entries = _pick_rep_apex_frames(sampled_entries, rep_analyses)
-        apex_jpegs = _extract_apex_jpegs(str(mp4_path), apex_entries)
+        rep_jpegs = _extract_rep_midframes(str(mp4_path), rep_analyses)
         logger.info(
-            "Picked %d apex frames for %d reps",
-            len(apex_jpegs), len(rep_analyses),
+            "Extracted %d mid-rep frames for %d reps",
+            len(rep_jpegs), len(rep_analyses),
         )
 
-        # Step E – Pass 2: multimodal Gemini call with per-rep apex images
-        analysis = _gemini_pass2(angle_text, apex_jpegs, pass1)
-        analysis["apex_frame_timestamps"] = [t for t, _ in apex_jpegs]
+        # Step E – Pass 2: multimodal Gemini call with mid-rep images
+        analysis = _gemini_pass2(angle_text, rep_jpegs, pass1)
+        analysis["rep_frame_timestamps"] = [t for t, _ in rep_jpegs]
 
-        # Buffer per-rep apex frame JPEGs in Redis for frontend display
-        if task_id and apex_jpegs:
+        # Buffer per-rep frame JPEGs in Redis for frontend display
+        if task_id and rep_jpegs:
             try:
-                apex_payload = [
+                rep_payload = [
                     {"t": t, "b64": base64.b64encode(jpg).decode()}
-                    for t, jpg in apex_jpegs
+                    for t, jpg in rep_jpegs
                 ]
                 _redis.set(
-                    f"apex_frames:{task_id}",
-                    json.dumps(apex_payload),
+                    f"rep_frames:{task_id}",
+                    json.dumps(rep_payload),
                     ex=LANDMARKS_TTL,
                 )
             except Exception as exc:
-                logger.warning("Failed to buffer apex frames in Redis: %s", exc)
+                logger.warning("Failed to buffer rep frames in Redis: %s", exc)
 
         # Step F – resolve per-rep problem_joints to landmark ranges for frontend
         problem_landmark_ranges: list[dict] = []

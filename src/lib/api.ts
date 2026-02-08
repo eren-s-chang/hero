@@ -38,7 +38,7 @@ export interface AnalysisResult {
   problem_joints?: string[];
   problem_landmarks?: string[];
   problem_landmark_ranges?: ProblemLandmarkRange[];
-  apex_frame_timestamps?: number[];
+  rep_frame_timestamps?: number[];
   actionable_correction: string;
 }
 
@@ -122,13 +122,13 @@ export async function healthCheck(): Promise<boolean> {
   }
 }
 
-/** Fetch a single apex-of-effort frame image as an object URL. */
-export async function fetchApexFrame(
+/** Fetch a single mid-rep reference frame image as an object URL. */
+export async function fetchRepFrame(
   taskId: string,
   index: number,
 ): Promise<string | null> {
   try {
-    const res = await fetch(`${API_BASE}/apex-frame/${taskId}/${index}`);
+    const res = await fetch(`${API_BASE}/rep-frame/${taskId}/${index}`);
     if (!res.ok) return null;
     const blob = await res.blob();
     return URL.createObjectURL(blob);

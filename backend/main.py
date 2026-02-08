@@ -155,36 +155,16 @@ async def landmarks(task_id: str):
     return {"task_id": task_id, "frames": json.loads(data)}
 
 
-@app.get("/apex-frames/{task_id}")
-async def apex_frames_meta(task_id: str):
-    """Return metadata about per-rep apex-of-effort frames."""
-    redis_key = f"apex_frames:{task_id}"
+@app.get("/rep-frame/{task_id}/{index}")
+async def rep_frame(task_id: str, index: int):
+    """Return a single mid-rep reference frame JPEG by index."""
+    redis_key = f"rep_frames:{task_id}"
     data = _redis.get(redis_key)
 
     if data is None:
         raise HTTPException(
             status_code=404,
-            detail="Apex frames not found. They may have expired or the task hasn't completed yet.",
-        )
-
-    payload = json.loads(data)
-    return {
-        "task_id": task_id,
-        "count": len(payload),
-        "timestamps": [entry["t"] for entry in payload],
-    }
-
-
-@app.get("/apex-frame/{task_id}/{index}")
-async def apex_frame(task_id: str, index: int):
-    """Return a single apex-of-effort frame JPEG by index."""
-    redis_key = f"apex_frames:{task_id}"
-    data = _redis.get(redis_key)
-
-    if data is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Apex frames not found. They may have expired or the task hasn't completed yet.",
+            detail="Rep frames not found. They may have expired or the task hasn't completed yet.",
         )
 
     payload = json.loads(data)

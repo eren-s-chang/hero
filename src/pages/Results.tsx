@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import {
   fetchResult,
   fetchLandmarks,
-  fetchApexFrame,
+  fetchRepFrame,
   type AnalysisResult,
   type RepAnalysis,
   type LandmarkFrame,
@@ -155,8 +155,8 @@ export default function Results() {
   // Landmarks
   const [frames, setFrames] = useState<LandmarkFrame[]>([]);
 
-  // Per-rep apex-of-effort frames
-  const [apexFrameUrls, setApexFrameUrls] = useState<string[]>([]);
+  // Per-rep mid-rep reference frames
+  const [repFrameUrls, setRepFrameUrls] = useState<string[]>([]);
 
   // Rep selection
   const [activeRep, setActiveRep] = useState<number | null>(null);
@@ -219,17 +219,17 @@ export default function Results() {
       });
   }, [status, taskId]);
 
-  // ---- Fetch per-rep apex frames once result is available --------------------
+  // ---- Fetch per-rep mid-rep frames once result is available ----------------
   useEffect(() => {
-    if (!taskId || !result?.apex_frame_timestamps?.length) return;
+    if (!taskId || !result?.rep_frame_timestamps?.length) return;
 
     Promise.all(
-      result.apex_frame_timestamps.map((_, i) => fetchApexFrame(taskId, i))
+      result.rep_frame_timestamps.map((_, i) => fetchRepFrame(taskId, i))
     )
       .then((urls) =>
-        setApexFrameUrls(urls.filter((u): u is string => u !== null))
+        setRepFrameUrls(urls.filter((u): u is string => u !== null))
       )
-      .catch(() => console.warn("Could not load apex frames"));
+      .catch(() => console.warn("Could not load rep frames"));
   }, [taskId, result]);
 
   // ---- Time-scale factor ---------------------------------------------------
@@ -554,32 +554,32 @@ export default function Results() {
               YOUR VIDEO
             </h3>
 
-            {/* Per-rep apex-of-effort frames */}
-            {apexFrameUrls.length > 0 && (
+            {/* Per-rep reference frames */}
+            {repFrameUrls.length > 0 && (
               <div className="mb-4 bg-card border border-border rounded-md p-4">
                 <p className="font-heading text-sm tracking-wider text-primary flex items-center gap-1.5 mb-2">
-                  <Camera className="w-3.5 h-3.5" /> APEX-OF-EFFORT FRAMES
+                  <Camera className="w-3.5 h-3.5" /> REP REFERENCE FRAMES
                 </p>
                 <p className="text-xs text-muted-foreground font-modern leading-relaxed mb-3">
-                  One frame per rep at peak joint displacement — sent to the AI
-                  for visual context.
+                  One frame per rep at the midpoint — sent to the AI for visual
+                  verification.
                 </p>
                 <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
-                  {apexFrameUrls.map((url, i) => (
+                  {repFrameUrls.map((url, i) => (
                     <div
                       key={i}
                       className="relative flex-shrink-0 rounded overflow-hidden border border-border"
                     >
                       <img
                         src={url}
-                        alt={`Apex frame ${i + 1}`}
+                        alt={`Rep ${i + 1} frame`}
                         className="w-24 h-auto object-contain"
                       />
                       <div className="absolute bottom-0 inset-x-0 bg-black/70 text-center py-0.5">
                         <span className="text-[10px] font-modern text-primary">
-                          {result.apex_frame_timestamps?.[i] != null
-                            ? `${result.apex_frame_timestamps[i].toFixed(1)}s`
-                            : `#${i + 1}`}
+                          {result.rep_frame_timestamps?.[i] != null
+                            ? `Rep ${i + 1} · ${result.rep_frame_timestamps[i].toFixed(1)}s`
+                            : `Rep ${i + 1}`}
                         </span>
                       </div>
                     </div>
