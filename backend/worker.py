@@ -486,6 +486,38 @@ def _extract_rep_midframes(
 
 
 # ---------------------------------------------------------------------------
+# Translation helper – English ➜ Japanese via Gemini
+# ---------------------------------------------------------------------------
+def _translate_to_japanese(text: str) -> str:
+    """Translate English text to Japanese using Gemini. Returns Japanese text
+    or the original English text if translation fails."""
+    if not GEMINI_API_KEY:
+        logger.warning("GEMINI_API_KEY not set; skipping translation")
+        return text
+    try:
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=(
+                "Translate the following English exercise-coaching correction "
+                "into natural, spoken Japanese. Output ONLY the Japanese text, "
+                "nothing else.\n\n"
+                f"{text}"
+            ),
+            config={"temperature": 0.3, "max_output_tokens": 2048},
+        )
+        ja_text = response.text.strip()
+        if ja_text:
+            logger.info("Translated correction to Japanese (%d chars)", len(ja_text))
+            return ja_text
+        logger.warning("Gemini returned empty translation; using English")
+        return text
+    except Exception as exc:
+        logger.warning("Translation to Japanese failed: %s; using English", exc)
+        return text
+
+
+# ---------------------------------------------------------------------------
 # ElevenLabs TTS helper
 # ---------------------------------------------------------------------------
 def _synthesize_correction_audio(text: str) -> bytes | None:
@@ -497,12 +529,15 @@ def _synthesize_correction_audio(text: str) -> bytes | None:
         logger.warning("Empty correction text; skipping TTS")
         return None
 
+    # Translate the English correction text to Japanese for spoken audio
+    spoken_text = _translate_to_japanese(text)
+
     try:
         url = f"{ELEVENLABS_API_URL}/{ELEVENLABS_VOICE_ID}"
         headers = {"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"}
         payload = {
-            "text": text,
-            "model_id": "eleven_monolingual_v1",
+            "text": spoken_text,
+            "model_id": "eleven_multilingual_v2",
             "voice_settings": {"stability": 0.5, "similarity_boost": 0.75},
         }
         response = requests.post(url, json=payload, headers=headers, timeout=30)
