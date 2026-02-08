@@ -367,6 +367,18 @@ export default function Results() {
 
   const analysisAllowed = result.analysis_allowed !== false;
   const rejectionReason = (result.rejection_reason || "").trim();
+  const overlayProblemRanges =
+    result.problem_landmark_ranges && result.problem_landmark_ranges.length > 0
+      ? result.problem_landmark_ranges
+      : result.problem_landmarks && result.problem_landmarks.length > 0 && frames.length > 0
+        ? [
+            {
+              start: 0,
+              end: frames[frames.length - 1].time_s,
+              landmarks: result.problem_landmarks,
+            },
+          ]
+        : undefined;
 
   if (!analysisAllowed) {
     return (
@@ -600,7 +612,7 @@ export default function Results() {
                 <SkeletonOverlay
                   videoRef={videoRef}
                   frames={frames}
-                  problemRanges={result.problem_landmark_ranges}
+                  problemRanges={overlayProblemRanges}
                 />
               )}
             </div>
