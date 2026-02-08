@@ -142,26 +142,26 @@ export async function fetchRepFrame(
     return URL.createObjectURL(blob);
   } catch {
     return null;
-
-  export interface CorrectionAudioResponse {
-    audio_url: string;
-    text: string;
   }
+}
 
-  /** Fetch correction audio for a task. Returns data URL and text. */
-  export async function fetchCorrectionAudio(
-    taskId: string,
-  ): Promise<CorrectionAudioResponse> {
-    const res = await fetch(`${API_BASE}/correction-audio/${taskId}`);
+export interface CorrectionAudioResponse {
+  audio_url: string;
+  text: string;
+}
 
-    if (!res.ok) {
-      if (res.status === 404) {
-        throw new Error("Correction audio not found or not ready.");
-      }
-      throw new Error(`Failed to fetch correction audio (${res.status})`);
+/** Fetch correction audio for a task. Returns data URL and text. */
+export async function fetchCorrectionAudio(
+  taskId: string,
+): Promise<CorrectionAudioResponse> {
+  const res = await fetch(`${API_BASE}/correction-audio/${taskId}`);
+
+  if (!res.ok) {
+    if (res.status === 404) {
+      throw new Error("Correction audio not found or not ready.");
     }
+    throw new Error(`Failed to fetch correction audio (${res.status})`);
+  }
 
-    return res.json();
-  }
-  }
+  return res.json();
 }

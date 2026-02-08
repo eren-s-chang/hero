@@ -510,6 +510,15 @@ export default function Results() {
 
   return (
     <main className="bg-background text-foreground min-h-screen relative overflow-hidden">
+      {/* Hidden audio element for auto-playing corrections */}
+      {correctionAudioUrl && (
+        <audio
+          ref={audioRef}
+          src={correctionAudioUrl}
+          autoPlay={false}
+          controls={false}
+        />
+      )}
       {/* Particles */}
       <div className="absolute inset-0 pointer-events-none">
         {[...Array(6)].map((_, i) => (
