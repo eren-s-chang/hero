@@ -216,7 +216,7 @@ const Demo = () => {
           transition={{ duration: 0.6, delay: 0.4 }}
           className="text-muted-foreground text-lg mb-12 max-w-xl"
         >
-          Record or upload a video of your squat, deadlift, or push-up and our AI will analyze your form.
+          Upload a rep-based gym exercise (squat, deadlift, push-up, etc.). Sports and non-rep videos are not supported.
         </motion.p>
 
         {/* Upload area */}

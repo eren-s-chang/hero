@@ -21,6 +21,8 @@ export interface RepAnalysis {
 }
 
 export interface AnalysisResult {
+  analysis_allowed?: boolean;
+  rejection_reason?: string;
   exercise_detected: string;
   rep_count: number;
   form_rating_1_to_10: number;

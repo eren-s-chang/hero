@@ -74,7 +74,16 @@ SYSTEM_PROMPT = (
     "You will receive a time-series of computed joint angles (in degrees) "
     "sampled from a workout video. Each line is one sampled frame with "
     "the timestamp and joint angles.\n\n"
+    "First, determine if the video depicts a common gym/fitness exercise with "
+    "clearly observable reps (full cycles of movement). Sports activities do NOT count "
+    "as common fitness exercises. Reject if the motion is a sport (e.g., basketball, "
+    "soccer, tennis, running, cycling, swimming, martial arts), dancing, "
+    "or if there is no clear rep-based movement you can count from the joint angles.\n\n"
     "Analyze the data and output **strictly valid JSON** with:\n"
+    "  • analysis_allowed  (boolean – true only if this is a common gym/fitness exercise "
+    "with clear, countable reps)\n"
+    "  • rejection_reason  (string – if analysis_allowed is false, explain briefly why; "
+    "otherwise return an empty string)\n"
     "  • exercise_detected  (string)\n"
     "  • rep_count  (integer – total reps detected, 0 if not a rep-based exercise)\n"
     "  • form_rating_1_to_10  (integer 1-10 – global average across the whole set)\n"
@@ -82,12 +91,17 @@ SYSTEM_PROMPT = (
     "  • rep_analyses  (list of objects, one per rep, each with rep_number, "
     "timestamp_start, timestamp_end, rating_1_to_10, and mistakes)\n"
     "  • actionable_correction  (string – single most impactful cue to fix form)\n"
+    "If analysis_allowed is false, set exercise_detected to 'unrecognized', rep_count to 0, "
+    "form_rating_1_to_10 to 0, main_mistakes to [], rep_analyses to [], and provide a short "
+    "actionable_correction about uploading a clear rep-based gym exercise.\n"
     "Do NOT wrap the JSON in markdown code-fences. Return raw JSON only."
 )
 
 RESPONSE_JSON_SCHEMA = {
     "type": "object",
     "properties": {
+        "analysis_allowed": {"type": "boolean"},
+        "rejection_reason": {"type": "string"},
         "exercise_detected": {"type": "string"},
         "rep_count": {"type": "integer"},
         "form_rating_1_to_10": {"type": "integer"},
@@ -115,6 +129,8 @@ RESPONSE_JSON_SCHEMA = {
         "actionable_correction": {"type": "string"},
     },
     "required": [
+        "analysis_allowed",
+        "rejection_reason",
         "exercise_detected",
         "rep_count",
         "form_rating_1_to_10",
@@ -321,9 +337,13 @@ def _interpret_with_gemini(angle_text: str) -> dict[str, Any]:
 
         logger.error("Gemini returned non-JSON: %s", raw)
         return {
+            "analysis_allowed": False,
+            "rejection_reason": "Could not parse analysis output.",
             "exercise_detected": "unknown",
+            "rep_count": 0,
             "form_rating_1_to_10": 0,
             "main_mistakes": ["Analysis could not be parsed."],
+            "rep_analyses": [],
             "actionable_correction": raw,
         }
 
