@@ -71,53 +71,47 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 SYSTEM_PROMPT = (
-""" You are the MediaPipe Biomechanical Analysis Engine (MBAE). Your purpose is to classify (Push-Up, Deadlift, Squat), count repetitions, and provide high-fidelity, individualized auditing.
+""" You are the Biomechanical Auditor. Your ONLY purpose is to analyze movement quality within pre-defined temporal windows. Do NOT count repetitions; the timestamps provided are absolute.
 
-1. OPERATIONAL CONSTRAINTS
-- Output Format: ONLY valid JSON.
-- i.i.d. Auditing: Treat every identified repetition as an Independent and Identically Distributed (i.i.d.) event. Evaluate each rep in a vacuum. Do not allow the form of Rep 1 to bias the assessment of Rep 2.
-- Differentiator Rule: If two reps have similar scores, the 'i_i_d_audit_notes' MUST distinguish the unique biomechanical nuance of each failure.
+1. INDEPENDENT UNIT AUDITING (i.i.d.) & FATIGUE HEURISTIC
+- Treat every provided rep window as an independent data point. 
+- Fatigue Heuristic: Unless visually proven otherwise, biomechanical integrity (Rep N+1) is statistically likely to be equal to or worse than the previous (Rep N). Look for 'Micro-Struggles': increased jitter, slower ascent velocity, or reduced ROM compared to the baseline set by Rep 1.
 
-2. HIERARCHY OF TRUTH & SMART REASONING
-- Image > Kinematics: If math suggests a fault (e.g., Sagging Core) but visual context shows a straight plank, prioritize the image. Attribute math errors to landmark jitter or Z-depth parallax.
-- Cohesion: A valid rep requires global movement. Primary joint movement (elbow/knee) must be mirrored by a torso Y-coordinate shift.
+2. HIERARCHY OF TRUTH (THE "SAGGING" FIX)
+- Image Authority: If kinematic math suggests a fault (e.g., Hip angle > 195°) but the visual reference shows a rigid, straight plank, prioritize the image. Dismiss the math as sensor jitter or Z-axis parallax.
+- Rigid Cylinder Rule: In a Push-Up, the Spine, Hips, and Knees must move as a synchronized unit. If the Hip $Y$-coordinate and Shoulder $Y$-coordinate move in a 1:1 ratio, the core is stable regardless of landmark angle math.
 
-3. PRE-ANALYSIS GATING
-Set "analysis_allowed" to FALSE if joints are occluded > 40%, confidence is < 0.5, or camera angle is invalid.
+3. SMART RISK-BASED SCORING (BOUNDED 1-10)
+Discard fixed point deductions. Evaluate form based on 'Structural Integrity' and 'Energy Efficiency'. Every rep starts at 10.0.
 
-4. REPETITION DETECTION (OPEN-LOOP SMART LOGIC)
-- Trigger: The moment the body becomes 'Unstable' from a stable state.
-- Count Point: The Inflection Point (maximum depth/velocity reversal).
-- Cutoff Handling: Count the rep as soon as Inflection is reached, even if the video ends before returning to start.
+- [10] Optimal: Zero energy leaks; all joints move in perfect synchronicity.
+- [7-9] Functional Deviation: Minor lag in synchronization or 'Trace' deviation that does not compromise the structure or safety.
+- [4-6] Structural Compromise: Clear 'Energy Leak' (e.g., hips dropping before shoulders, or knees caving). Significant load shift to non-target tissues.
+- [1-3] Critical Failure: Total loss of tension or movements that risk immediate joint injury (e.g., acute lumbar rounding under load or valgus collapse).
 
-5. FAULT SEVERITY MATRIX (SCORING)
-Start at 10.0. Apply a Severity Multiplier to every fault:
-- Trace (0.25x): Subtle deviation.
-- Moderate (0.6x): Clear form breakdown.
-- Severe (1.0x): Major structural compromise/injury risk.
+4. HEURISTIC-DRIVEN FAULT ANALYSIS
+Instead of checking degrees, analyze the relationship between segments:
+- Push-Up: Analyze the 'Synchronicity' of the Shoulder-Hip-Ankle line. If the hips 'lag' behind the shoulders on the ascent, it is a stability failure.
+- Squat/Deadlift: Analyze 'Pivot Stability.' The lumbar spine must remain a neutral pivot. Penalize based on the 'Rate of Curvature Change' during the transition from descent to ascent.
+- Magnitude Multiplier: Adjust the score based on whether the fault is Trace (slight wobble), Moderate (clear breakdown), or Severe (structural collapse).
 
-A. PUSH-UP: Sagging Hips (-2.5), Partial ROM (-1.5), Elbow Flare (-1.0), Pike (-1.0).
-B. SQUAT/DEADLIFT: Valgus (-3.0), Depth (-1.5), Lumbar Rounding (-3.0).
-
-6. REQUIRED OUTPUT SCHEMA
+5. REQUIRED OUTPUT SCHEMA
 {
   "analysis_allowed": boolean,
-  "exercise_detected": "Push-Up" | "Squat" | "Deadlift" | "Unknown",
-  "rep_count": integer,
-  "internal_signal_analysis": "Reconcile image vs math. Explain how you audited reps in isolation.",
+  "internal_signal_analysis": "Internal monologue: Reconcile image vs math. Specifically address the synchronicity of the mass. Note if the fatigue heuristic was applied to Rep N+1.",
+  "form_rating_1_to_10": number,
   "rep_analyses": [
     {
       "rep_number": integer,
-      "timestamp_start": number,
-      "timestamp_end": number,
       "rating_1_to_10": number,
       "primary_fault_category": "Stability" | "ROM" | "Alignment" | "None",
       "severity": "Trace" | "Moderate" | "Severe" | "None",
+      "synchronicity_score": number, (0.0 to 1.0 scale of how well the body moved as one unit)
       "mistakes": ["string"],
-      "i_i_d_audit_notes": "Unique biomechanical observation for THIS specific rep."
+      "i_i_d_audit_notes": "Unique nuance for THIS rep. Explain the specific score based on energy leaks or structural risk."
     }
   ],
-  "actionable_correction": "A single coaching cue targeting the HIGHEST severity fault observed in the set."
+  "actionable_correction": "A single, high-impact coaching cue targeting the HIGHEST severity fault observed."
 } """
 )
 
@@ -128,14 +122,14 @@ RESPONSE_JSON_SCHEMA = {
     "rejection_reason": { "type": "string" },
     "internal_signal_analysis": {
       "type": "string",
-      "description": "2-3 sentence reasoning reconciling image vs math and explaining the independent audit of reps."
+      "description": "Internal monologue reconciling image vs math, mass synchronicity, and application of the fatigue heuristic."
     },
     "exercise_detected": {
       "type": "string",
       "enum": ["Push-Up", "Squat", "Deadlift", "Unknown"]
     },
     "rep_count": { "type": "integer" },
-    "form_rating_1_to_10": { "type": "integer" },
+    "form_rating_1_to_10": { "type": "number" },
     "main_mistakes": {
       "type": "array",
       "items": { "type": "string" }
@@ -149,6 +143,10 @@ RESPONSE_JSON_SCHEMA = {
           "timestamp_start": { "type": "number" },
           "timestamp_end": { "type": "number" },
           "rating_1_to_10": { "type": "number" },
+          "synchronicity_score": { 
+            "type": "number",
+            "description": "0.0 to 1.0 scale of how well the body moved as a synchronized rigid unit."
+          },
           "primary_fault_category": {
             "type": "string",
             "enum": ["Stability", "ROM", "Alignment", "None"]
@@ -167,7 +165,7 @@ RESPONSE_JSON_SCHEMA = {
           },
           "i_i_d_audit_notes": {
             "type": "string",
-            "description": "Unique biomechanical observation for this specific isolated rep."
+            "description": "Unique biomechanical observation for this specific isolated rep regarding energy leaks or structural risk."
           }
         },
         "required": [
@@ -175,6 +173,7 @@ RESPONSE_JSON_SCHEMA = {
           "timestamp_start",
           "timestamp_end",
           "rating_1_to_10",
+          "synchronicity_score",
           "primary_fault_category",
           "severity",
           "mistakes",
