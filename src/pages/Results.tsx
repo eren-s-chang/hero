@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import {
   fetchResult,
   fetchLandmarks,
-  fetchPeakFrame,
+  fetchApexFrame,
   type AnalysisResult,
   type RepAnalysis,
   type LandmarkFrame,
@@ -155,8 +155,8 @@ export default function Results() {
   // Landmarks
   const [frames, setFrames] = useState<LandmarkFrame[]>([]);
 
-  // Peak-motion frame
-  const [peakFrameUrl, setPeakFrameUrl] = useState<string | null>(null);
+  // Per-rep apex-of-effort frames
+  const [apexFrameUrls, setApexFrameUrls] = useState<string[]>([]);
 
   // Rep selection
   const [activeRep, setActiveRep] = useState<number | null>(null);
@@ -208,23 +208,29 @@ export default function Results() {
     };
   }, [taskId]);
 
-  // ---- Fetch landmarks + peak frame once completed --------------------------
+  // ---- Fetch landmarks once completed ----------------------------------------
   useEffect(() => {
     if (status !== "completed" || !taskId) return;
 
     fetchLandmarks(taskId)
       .then((data) => setFrames(data.frames))
       .catch(() => {
-        // non-critical — skeleton just won't show
         console.warn("Could not load landmarks for overlay");
       });
-
-    fetchPeakFrame(taskId)
-      .then((url) => setPeakFrameUrl(url))
-      .catch(() => {
-        console.warn("Could not load peak frame");
-      });
   }, [status, taskId]);
+
+  // ---- Fetch per-rep apex frames once result is available --------------------
+  useEffect(() => {
+    if (!taskId || !result?.apex_frame_timestamps?.length) return;
+
+    Promise.all(
+      result.apex_frame_timestamps.map((_, i) => fetchApexFrame(taskId, i))
+    )
+      .then((urls) =>
+        setApexFrameUrls(urls.filter((u): u is string => u !== null))
+      )
+      .catch(() => console.warn("Could not load apex frames"));
+  }, [taskId, result]);
 
   // ---- Time-scale factor ---------------------------------------------------
   // The backend analysed the *downscaled* video whose duration may differ
@@ -548,32 +554,36 @@ export default function Results() {
               YOUR VIDEO
             </h3>
 
-            {/* Peak-motion frame thumbnail */}
-            {peakFrameUrl && (
-              <div className="mb-4 flex items-start gap-4 bg-card border border-border rounded-md p-4">
-                <div className="relative flex-shrink-0 rounded overflow-hidden border border-border">
-                  <img
-                    src={peakFrameUrl}
-                    alt="Peak motion frame"
-                    className="w-32 h-auto object-contain"
-                  />
-                  <div className="absolute bottom-0 inset-x-0 bg-black/70 text-center py-0.5">
-                    <span className="text-[10px] font-modern text-primary">
-                      {result.peak_frame_time != null
-                        ? `${result.peak_frame_time.toFixed(1)}s`
-                        : ""}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <p className="font-heading text-sm tracking-wider text-primary flex items-center gap-1.5 mb-1">
-                    <Camera className="w-3.5 h-3.5" /> PEAK MOTION FRAME
-                  </p>
-                  <p className="text-xs text-muted-foreground font-modern leading-relaxed">
-                    The moment of highest angular velocity during your set — this
-                    frame was sent to the AI alongside the angle data for visual
-                    context.
-                  </p>
+            {/* Per-rep apex-of-effort frames */}
+            {apexFrameUrls.length > 0 && (
+              <div className="mb-4 bg-card border border-border rounded-md p-4">
+                <p className="font-heading text-sm tracking-wider text-primary flex items-center gap-1.5 mb-2">
+                  <Camera className="w-3.5 h-3.5" /> APEX-OF-EFFORT FRAMES
+                </p>
+                <p className="text-xs text-muted-foreground font-modern leading-relaxed mb-3">
+                  One frame per rep at peak joint displacement — sent to the AI
+                  for visual context.
+                </p>
+                <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+                  {apexFrameUrls.map((url, i) => (
+                    <div
+                      key={i}
+                      className="relative flex-shrink-0 rounded overflow-hidden border border-border"
+                    >
+                      <img
+                        src={url}
+                        alt={`Apex frame ${i + 1}`}
+                        className="w-24 h-auto object-contain"
+                      />
+                      <div className="absolute bottom-0 inset-x-0 bg-black/70 text-center py-0.5">
+                        <span className="text-[10px] font-modern text-primary">
+                          {result.apex_frame_timestamps?.[i] != null
+                            ? `${result.apex_frame_timestamps[i].toFixed(1)}s`
+                            : `#${i + 1}`}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

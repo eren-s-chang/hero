@@ -68,7 +68,7 @@ LANDMARKS_TTL = 3600  # same as result_expires
 # Gemini config
 # ---------------------------------------------------------------------------
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 
 SYSTEM_PROMPT = (
 """
@@ -76,12 +76,14 @@ You are the MediaPipe Biomechanical Analysis Engine (MBAE). Your specific purpos
 
 ### 1. OPERATIONAL CONSTRAINTS
 - **Output Format:** You must output ONLY valid JSON. Do not include markdown formatting (like ```json), conversational text, or explanations outside the JSON structure.
-- **Input Handling:** You will receive a time-series of joint angles AND a single reference image.
-- **Reference Image:** The attached image is the **peak-motion frame** — the moment of highest angular velocity during the set. Use it to:
+- **Input Handling:** You will receive a time-series of joint angles with landmark coordinates, AND one reference image per rep.
+- **Reference Images:** The attached images are **apex-of-effort frames** — one per rep, captured at the moment of maximum joint displacement from resting position (e.g., bottom of a squat, top of a curl, deepest hinge). Use them to:
   • Confirm or correct the exercise classification (equipment, stance, grip, body orientation)
   • Identify visual cues not captured by angles alone (e.g., loaded barbell = heavier exercise variant, bench = bench press)
   • Assess camera angle quality for gating decisions
-  • If no image is attached, rely solely on the angle data.
+  • Visually verify per-rep form faults (depth, alignment, posture)
+  • If no images are attached, rely solely on the angle and coordinate data.
+- **Landmark Coordinates:** Each data row includes (x,y) coordinates for key joints (normalized 0–1). Use them for spatial analysis angles cannot capture (e.g., knee valgus via lateral displacement, stance width, bar path).
 - **Complexity Paradox:** Prioritize 2D landmark stability (X, Y) over unstable 3D Z-axis projections unless the view is strictly sagittal.
 - **Signal Processing:** Assume raw data contains jitter. Apply logical smoothing: do not flag faults based on single-frame anomalies; require a fault to persist for >0.2 seconds.
 
@@ -299,6 +301,16 @@ ANGLE_TO_LANDMARKS: dict[str, list[str]] = {
     for name, (a, v, b) in ANGLE_DEFS.items()
 }
 
+# Key landmarks for coordinate output (abbreviated for compactness in prompt)
+_COORD_LANDMARKS: list[tuple[int, str]] = [
+    (PoseLandmark.LEFT_SHOULDER, "LS"), (PoseLandmark.RIGHT_SHOULDER, "RS"),
+    (PoseLandmark.LEFT_ELBOW, "LE"),    (PoseLandmark.RIGHT_ELBOW, "RE"),
+    (PoseLandmark.LEFT_WRIST, "LW"),    (PoseLandmark.RIGHT_WRIST, "RW"),
+    (PoseLandmark.LEFT_HIP, "LH"),      (PoseLandmark.RIGHT_HIP, "RH"),
+    (PoseLandmark.LEFT_KNEE, "LK"),     (PoseLandmark.RIGHT_KNEE, "RK"),
+    (PoseLandmark.LEFT_ANKLE, "LA"),    (PoseLandmark.RIGHT_ANKLE, "RA"),
+]
+
 
 def _angle_between(a, vertex, b) -> float:
     """Return the angle in degrees at *vertex* formed by points *a* and *b*.
@@ -327,24 +339,20 @@ def _compute_angles(landmarks) -> dict[str, float]:
 
 def _process_video(
     video_path: str, angle_every_n: int | None = None
-) -> tuple[str, list[dict[str, Any]], bytes | None, float]:
+) -> tuple[str, list[dict[str, Any]], list[dict]]:
     """Run MediaPipe on *every* frame for smooth frontend overlay,
     but only compute joint angles on sampled frames for the LLM.
-
-    Also captures the single frame with the highest angular velocity
-    (peak-motion frame) and returns it as a JPEG for Gemini visual context.
 
     Returns
     -------
     angle_text : str
-        Compact time-series of joint angles (sampled) for the LLM.
+        Compact time-series of joint angles + landmark coordinates for the LLM.
     raw_frames : list[dict]
         Per-frame raw landmark data (every frame) for the frontend overlay.
         Each dict: {"time_s": float, "landmarks": [{name, x, y, z}, ...]}
-    peak_frame_jpeg : bytes | None
-        JPEG-encoded BGR frame at the moment of highest angular velocity.
-    peak_frame_time : float
-        Timestamp (seconds) of the peak-motion frame.
+    sampled_entries : list[dict]
+        Per-sampled-frame data for apex detection.  Each dict has
+        "timestamp_s", "displacement" (from resting angles), "frame_idx".
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -369,11 +377,9 @@ def _process_video(
     raw_frames: list[dict[str, Any]] = []
     frame_idx = 0
 
-    # Track angular velocity to find the peak-motion frame
-    prev_angles: dict[str, float] | None = None
-    max_velocity = 0.0
-    peak_bgr_frame = None  # raw BGR numpy array
-    peak_frame_time = 0.0
+    # Track displacement from resting pose for apex-of-effort detection
+    baseline_angles: dict[str, float] | None = None
+    sampled_entries: list[dict] = []
 
     try:
         while True:
@@ -395,24 +401,37 @@ def _process_video(
                 ]
                 raw_frames.append({"time_s": timestamp_s, "landmarks": lm_list})
 
-                # ── Angles → LLM (sampled frames only) ───────────
+                # ── Angles + coordinates → LLM (sampled frames only)
                 if frame_idx % angle_every_n == 0:
                     angles = _compute_angles(result.pose_landmarks)
                     angle_parts = [f"{k}={v}" for k, v in angles.items()]
+                    # Key landmark (x,y) coordinates
+                    lm_raw = result.pose_landmarks.landmark
+                    coord_parts = [
+                        f"{sn}({lm_raw[idx].x:.3f},{lm_raw[idx].y:.3f})"
+                        for idx, sn in _COORD_LANDMARKS
+                    ]
                     angle_lines.append(
-                        f"t={timestamp_s:.3f} " + " ".join(angle_parts)
+                        f"t={timestamp_s:.3f} "
+                        + " ".join(angle_parts)
+                        + " | "
+                        + " ".join(coord_parts)
                     )
 
-                    # ── Track peak angular velocity ───────────────
-                    if prev_angles is not None:
-                        velocity = sum(
-                            abs(angles[k] - prev_angles[k]) for k in angles
+                    # ── Track displacement from resting pose ──────
+                    if baseline_angles is None:
+                        baseline_angles = angles.copy()
+                        displacement = 0.0
+                    else:
+                        displacement = sum(
+                            abs(angles[k] - baseline_angles[k])
+                            for k in angles
                         )
-                        if velocity > max_velocity:
-                            max_velocity = velocity
-                            peak_bgr_frame = frame.copy()
-                            peak_frame_time = timestamp_s
-                    prev_angles = angles
+                    sampled_entries.append({
+                        "timestamp_s": timestamp_s,
+                        "displacement": displacement,
+                        "frame_idx": frame_idx,
+                    })
 
             frame_idx += 1
     finally:
@@ -422,51 +441,121 @@ def _process_video(
     if not angle_lines:
         raise RuntimeError("MediaPipe could not detect any pose in the video.")
 
-    # Encode peak-motion frame as JPEG
-    peak_frame_jpeg: bytes | None = None
-    if peak_bgr_frame is not None:
-        ok, buf = cv2.imencode(".jpg", peak_bgr_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        if ok:
-            peak_frame_jpeg = buf.tobytes()
-            logger.info(
-                "Peak-motion frame at t=%.3fs (velocity=%.1f), JPEG=%d bytes",
-                peak_frame_time, max_velocity, len(peak_frame_jpeg),
-            )
+    # Prepend header explaining the data format
+    header = (
+        "# Format: t=<seconds> <joint_angles_degrees> | <landmark_xy_coords>\n"
+        "# Landmarks: LS=LEFT_SHOULDER RS=RIGHT_SHOULDER LE=LEFT_ELBOW RE=RIGHT_ELBOW "
+        "LW=LEFT_WRIST RW=RIGHT_WRIST LH=LEFT_HIP RH=RIGHT_HIP "
+        "LK=LEFT_KNEE RK=RIGHT_KNEE LA=LEFT_ANKLE RA=RIGHT_ANKLE"
+    )
 
     logger.info(
-        "Processed %d frames → %d landmark frames, %d angle samples",
-        frame_idx, len(raw_frames), len(angle_lines),
+        "Processed %d frames → %d landmark frames, %d angle samples, %d sampled entries",
+        frame_idx, len(raw_frames), len(angle_lines), len(sampled_entries),
     )
-    return "\n".join(angle_lines), raw_frames, peak_frame_jpeg, peak_frame_time
+    return header + "\n" + "\n".join(angle_lines), raw_frames, sampled_entries
+
+
+def _pick_rep_apex_frames(
+    sampled_entries: list[dict],
+    rep_analyses: list[dict],
+) -> list[dict]:
+    """For each rep, find the sampled frame with the highest displacement
+    within that rep's [timestamp_start, timestamp_end] window.
+
+    Returns one entry per rep (guaranteed 1:1), ordered by rep number.
+    Reps with no sampled frames in their window are skipped.
+    """
+    if not sampled_entries or not rep_analyses:
+        return []
+
+    apex_entries: list[dict] = []
+    for rep in sorted(rep_analyses, key=lambda r: r.get("rep_number", 0)):
+        t_start = rep.get("timestamp_start", 0)
+        t_end = rep.get("timestamp_end", 0)
+
+        # Filter sampled entries within this rep's time window
+        window = [
+            e for e in sampled_entries
+            if t_start <= e["timestamp_s"] <= t_end
+        ]
+        if not window:
+            # Expand window slightly (±0.15s) in case of rounding
+            window = [
+                e for e in sampled_entries
+                if (t_start - 0.15) <= e["timestamp_s"] <= (t_end + 0.15)
+            ]
+        if window:
+            best = max(window, key=lambda e: e["displacement"])
+            apex_entries.append(best)
+
+    logger.info(
+        "Picked %d apex frames for %d reps from %d sampled entries",
+        len(apex_entries), len(rep_analyses), len(sampled_entries),
+    )
+    return apex_entries
+
+
+def _extract_apex_jpegs(
+    video_path: str, apex_entries: list[dict],
+) -> list[tuple[float, bytes]]:
+    """Re-read the video at specific frame indices and encode as JPEG.
+
+    Returns list of (timestamp_s, jpeg_bytes) tuples.
+    """
+    if not apex_entries:
+        return []
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        logger.warning("Cannot re-open video for apex frame extraction")
+        return []
+
+    results: list[tuple[float, bytes]] = []
+    try:
+        for entry in apex_entries:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, entry["frame_idx"])
+            ret, bgr = cap.read()
+            if ret:
+                ok, buf = cv2.imencode(
+                    ".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, 80],
+                )
+                if ok:
+                    results.append((entry["timestamp_s"], buf.tobytes()))
+    finally:
+        cap.release()
+
+    logger.info(
+        "Extracted %d apex-of-effort JPEGs (%.1f KB total)",
+        len(results), sum(len(b) for _, b in results) / 1024,
+    )
+    return results
 
 
 # ---------------------------------------------------------------------------
-# Gemini helper
+# Gemini helpers (two-pass architecture)
 # ---------------------------------------------------------------------------
-def _interpret_with_gemini(
-    angle_text: str, peak_frame_jpeg: bytes | None = None
+_FALLBACK_RESULT: dict[str, Any] = {
+    "analysis_allowed": False,
+    "rejection_reason": "Could not parse analysis output.",
+    "exercise_detected": "unknown",
+    "rep_count": 0,
+    "form_rating_1_to_10": 0,
+    "main_mistakes": ["Analysis could not be parsed."],
+    "rep_analyses": [],
+    "actionable_correction": "",
+}
+
+
+def _gemini_call(
+    contents: str | list,
+    tag: str = "",
 ) -> dict[str, Any]:
-    """Send the joint-angle time-series (+ optional peak-motion image) to Gemini."""
+    """Low-level Gemini call with structured JSON parsing. Shared by both passes."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set.")
 
     client = genai.Client(api_key=GEMINI_API_KEY)
-
-    prompt_text = (
-        f"{SYSTEM_PROMPT}\n\n"
-        "Here are the joint angles (degrees) extracted from a workout video:\n\n"
-        f"{angle_text}"
-    )
-
-    # Build multimodal contents: text + optional image
-    if peak_frame_jpeg:
-        contents = [
-            types.Part.from_bytes(data=peak_frame_jpeg, mime_type="image/jpeg"),
-            prompt_text,
-        ]
-        logger.info("Sending multimodal request (text + %d-byte image)", len(peak_frame_jpeg))
-    else:
-        contents = prompt_text
 
     try:
         response = client.models.generate_content(
@@ -481,8 +570,8 @@ def _interpret_with_gemini(
         )
     except Exception as exc:
         logger.warning(
-            "Structured output schema not supported by SDK; falling back to JSON mode only: %s",
-            exc,
+            "[%s] Structured schema not supported; falling back to JSON mode: %s",
+            tag, exc,
         )
         response = client.models.generate_content(
             model=GEMINI_MODEL,
@@ -498,12 +587,9 @@ def _interpret_with_gemini(
         return response.parsed
 
     raw = response.text.strip()
-
-    # Strip markdown code fences if the model wraps them anyway
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
     raw = re.sub(r"\s*```$", "", raw)
 
-    # Best-effort extraction if extra text sneaks in
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -516,17 +602,64 @@ def _interpret_with_gemini(
             except json.JSONDecodeError:
                 pass
 
-        logger.error("Gemini returned non-JSON: %s", raw)
-        return {
-            "analysis_allowed": False,
-            "rejection_reason": "Could not parse analysis output.",
-            "exercise_detected": "unknown",
-            "rep_count": 0,
-            "form_rating_1_to_10": 0,
-            "main_mistakes": ["Analysis could not be parsed."],
-            "rep_analyses": [],
-            "actionable_correction": raw,
-        }
+        logger.error("[%s] Gemini returned non-JSON: %s", tag, raw)
+        return {**_FALLBACK_RESULT, "actionable_correction": raw}
+
+
+def _gemini_pass1(angle_text: str) -> dict[str, Any]:
+    """Pass 1 — text-only.  Send angle + coordinate data to get rep
+    timestamps, exercise classification, scoring, and per-rep analysis."""
+    prompt = (
+        f"{SYSTEM_PROMPT}\n\n"
+        "Here are the joint angles (degrees) and landmark coordinates "
+        "extracted from a workout video:\n\n"
+        f"{angle_text}"
+    )
+    logger.info("[Pass 1] Sending %d chars of angle data (text-only)", len(angle_text))
+    return _gemini_call(prompt, tag="Pass 1")
+
+
+def _gemini_pass2(
+    angle_text: str,
+    apex_jpegs: list[tuple[float, bytes]],
+    pass1_result: dict[str, Any],
+) -> dict[str, Any]:
+    """Pass 2 — multimodal.  Re-send angles + per-rep apex-of-effort images
+    so Gemini can visually verify and refine the analysis from Pass 1."""
+    if not apex_jpegs:
+        return pass1_result
+
+    # Build a short summary of Pass 1 to give Gemini context
+    pass1_summary = (
+        f"Previous text-only analysis detected: {pass1_result.get('exercise_detected', 'Unknown')}, "
+        f"{pass1_result.get('rep_count', 0)} reps, "
+        f"score {pass1_result.get('form_rating_1_to_10', 0)}/10.\n"
+        f"Main mistakes: {', '.join(pass1_result.get('main_mistakes', [])) or 'none'}.\n\n"
+    )
+
+    prompt = (
+        f"{SYSTEM_PROMPT}\n\n"
+        "You previously analyzed this data using angles only. Now you also have "
+        f"{len(apex_jpegs)} apex-of-effort images (one per rep, at peak joint "
+        "displacement from resting). Use them to visually verify and refine your "
+        "analysis. Correct any errors — especially exercise classification, "
+        "depth assessment, and form faults that are visually apparent.\n\n"
+        f"{pass1_summary}"
+        "Here are the joint angles (degrees) and landmark coordinates "
+        "extracted from a workout video:\n\n"
+        f"{angle_text}"
+    )
+
+    contents: list = []
+    for i, (_ts, jpeg) in enumerate(apex_jpegs):
+        contents.append(types.Part.from_bytes(data=jpeg, mime_type="image/jpeg"))
+    contents.append(prompt)
+
+    logger.info(
+        "[Pass 2] Sending multimodal request (text + %d apex images, %.1f KB)",
+        len(apex_jpegs), sum(len(b) for _, b in apex_jpegs) / 1024,
+    )
+    return _gemini_call(contents, tag="Pass 2")
 
 
 # ---------------------------------------------------------------------------
@@ -575,11 +708,9 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
         # Convert WebM/other formats to MP4 for reliable OpenCV decoding
         mp4_path = _ensure_mp4(tmp_path)
 
-        # Step A – extract joint angles + raw landmarks + peak frame
+        # Step A – extract joint angles + raw landmarks + displacement data
         logger.info("Step A: processing video %s", mp4_path.name)
-        angle_text, raw_frames, peak_frame_jpeg, peak_frame_time = _process_video(
-            str(mp4_path)
-        )
+        angle_text, raw_frames, sampled_entries = _process_video(str(mp4_path))
 
         # Step B – buffer raw landmarks in Redis for frontend overlay
         task_id = self.request.id
@@ -594,23 +725,38 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
             except Exception as exc:
                 logger.warning("Failed to buffer landmarks in Redis: %s", exc)
 
-            # Buffer peak-motion frame JPEG for frontend display
-            if peak_frame_jpeg:
-                try:
-                    _redis.set(
-                        f"peak_frame:{task_id}",
-                        base64.b64encode(peak_frame_jpeg).decode(),
-                        ex=LANDMARKS_TTL,
-                    )
-                except Exception as exc:
-                    logger.warning("Failed to buffer peak frame in Redis: %s", exc)
+        # Step C – Pass 1: text-only Gemini call to get rep timestamps
+        pass1 = _gemini_pass1(angle_text)
 
-        # Step C – interpret with Gemini (multimodal: angles + peak frame image)
-        logger.info("Step C: sending %d chars of angle data to Gemini", len(angle_text))
-        analysis = _interpret_with_gemini(angle_text, peak_frame_jpeg)
-        analysis["peak_frame_time"] = peak_frame_time
+        # Step D – pick per-rep apex frames using Pass 1's rep timestamps
+        rep_analyses = pass1.get("rep_analyses", [])
+        apex_entries = _pick_rep_apex_frames(sampled_entries, rep_analyses)
+        apex_jpegs = _extract_apex_jpegs(str(mp4_path), apex_entries)
+        logger.info(
+            "Picked %d apex frames for %d reps",
+            len(apex_jpegs), len(rep_analyses),
+        )
 
-        # Step D – resolve per-rep problem_joints to landmark ranges for frontend
+        # Step E – Pass 2: multimodal Gemini call with per-rep apex images
+        analysis = _gemini_pass2(angle_text, apex_jpegs, pass1)
+        analysis["apex_frame_timestamps"] = [t for t, _ in apex_jpegs]
+
+        # Buffer per-rep apex frame JPEGs in Redis for frontend display
+        if task_id and apex_jpegs:
+            try:
+                apex_payload = [
+                    {"t": t, "b64": base64.b64encode(jpg).decode()}
+                    for t, jpg in apex_jpegs
+                ]
+                _redis.set(
+                    f"apex_frames:{task_id}",
+                    json.dumps(apex_payload),
+                    ex=LANDMARKS_TTL,
+                )
+            except Exception as exc:
+                logger.warning("Failed to buffer apex frames in Redis: %s", exc)
+
+        # Step F – resolve per-rep problem_joints to landmark ranges for frontend
         problem_landmark_ranges: list[dict] = []
         global_landmarks_seen: set[str] = set()
         global_problem_landmarks: list[str] = []

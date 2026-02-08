@@ -38,7 +38,7 @@ export interface AnalysisResult {
   problem_joints?: string[];
   problem_landmarks?: string[];
   problem_landmark_ranges?: ProblemLandmarkRange[];
-  peak_frame_time?: number;
+  apex_frame_timestamps?: number[];
   actionable_correction: string;
 }
 
@@ -122,10 +122,13 @@ export async function healthCheck(): Promise<boolean> {
   }
 }
 
-/** Fetch the peak-motion frame image as an object URL. */
-export async function fetchPeakFrame(taskId: string): Promise<string | null> {
+/** Fetch a single apex-of-effort frame image as an object URL. */
+export async function fetchApexFrame(
+  taskId: string,
+  index: number,
+): Promise<string | null> {
   try {
-    const res = await fetch(`${API_BASE}/peak-frame/${taskId}`);
+    const res = await fetch(`${API_BASE}/apex-frame/${taskId}/${index}`);
     if (!res.ok) return null;
     const blob = await res.blob();
     return URL.createObjectURL(blob);
