@@ -256,26 +256,35 @@ _PASS1_SCHEMA = {
 }
 
 _PASS1_PROMPT = (
-    "You are a repetition-detection engine. Your ONLY task is to identify "
-    "individual exercise repetitions from joint-angle time-series data.\n\n"
-    "Use a 3-State Finite State Machine with Hysteresis:\n"
-    "- State A (Start): Joint angle at resting threshold.\n"
-    "- State B (Inflection): Joint angle crosses effort threshold "
-    "(significant ROM change in the primary mover joints — elbows for push-up, "
-    "knees/hips for squat; otherwise pick the strongest periodic signal).\n"
-    "- State C (Return): Transition B → A. Count a rep if ROM change >= 35° "
-    "and duration >= 0.35s, and the joint returns within 15° of the start.\n\n"
-    "Push-Up rep cue: elbow flexion/extension is primary; require visible torso "
-    "descent (shoulder + hip Y decrease together). Count even if depth is partial.\n"
-    "Squat rep cue: knee + hip flexion are primary; require pelvis (hip Y) drop. "
-    "Count even if depth is shallow.\n\n"
-    "Apply logical smoothing: ignore single-frame anomalies (<0.2s).\n\n"
-    "Output ONLY:\n"
-    '- \"rep_count\": total completed reps\n'
-    '- \"rep_analyses\": array of {\"rep_number\", \"timestamp_start\", '
-    '\"timestamp_end\"} for each rep\n\n'
-    "Do NOT classify the exercise. Do NOT score form. ONLY detect rep "
-    "boundaries and timestamps."
+    """You are a Pattern Recognition Engine. Your task is to extract repetition 
+timestamps from biomechanical time-series data by identifying periodic 
+oscillations in the global movement.
+
+1. IDENTIFY THE DOMINANT SIGNAL:
+   Scan the data for the joint or coordinate that shows the most consistent, 
+   large-scale rhythmic oscillation. This is your 'Anchor'.
+
+2. REPETITION HEURISTICS (SMART DETECTION):
+   A repetition is defined by a complete 'Phase Cycle':
+   - Phase 1 (Descent): A sustained, directional trend away from the 
+     initial resting state.
+   - Phase 2 (Inflection): The moment the trend reverses (Velocity crosses zero). 
+     This must represent a meaningful change in body position, not jitter.
+   - Phase 3 (Ascent): A sustained trend returning to the original resting state.
+
+3. CONTEXTUAL VALIDATION:
+   - Use 'Cohesion': For a rep to be valid, the change in the Anchor signal 
+     must be mirrored by a change in the torso's vertical position (Shoulder/Hip Y).
+   - Ignore 'Micro-oscillations': Small fluctuations that do not match the 
+     overall scale of the rhythmic pattern should be discarded as noise.
+
+4. TEMPORAL CONTINUITY:
+   Ensure the start and end of a rep represent a return to a 'Stable' state. 
+   If the signal does not return to the baseline, it is an incomplete or 
+   transition movement, not a counted rep.
+
+OUTPUT ONLY JSON: 
+{ 'rep_count': int, 'rep_analyses': [{'rep_number': int, 'timestamp_start': float, 'timestamp_end': float}] }"""
 )
 
 # ---------------------------------------------------------------------------
