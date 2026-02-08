@@ -4,7 +4,7 @@ FROM python:3.10-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# System deps required by MediaPipe / OpenCV
+# System deps required by MediaPipe / OpenCV + ffmpeg for WebM→MP4
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libgl1 \
@@ -13,6 +13,7 @@ RUN apt-get update && \
         libxext6 \
         libxrender-dev \
         curl \
+        ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

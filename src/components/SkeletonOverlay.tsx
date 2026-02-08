@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { LandmarkFrame } from "@/lib/api";
+import type { LandmarkFrame, ProblemLandmarkRange } from "@/lib/api";
 
 // MediaPipe Pose connections for drawing the skeleton
 const POSE_CONNECTIONS: [string, string][] = [
@@ -39,6 +39,8 @@ interface SkeletonOverlayProps {
   frames: LandmarkFrame[];
   /** HSL color string, e.g. "48 90% 55%" */
   color?: string;
+  /** Time-ranged problem landmark highlights — red only during each range */
+  problemRanges?: ProblemLandmarkRange[];
 }
 
 /** Binary search for the frame closest to `time`. */
@@ -70,6 +72,7 @@ export default function SkeletonOverlay({
   videoRef,
   frames,
   color = "48 90% 55%",
+  problemRanges = [],
 }: SkeletonOverlayProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef<number>(0);
@@ -103,6 +106,18 @@ export default function SkeletonOverlay({
       const scale = lastT > 0 ? lastT / vidDur : 1;
       const lookupTime = video.currentTime * scale;
 
+      // Build the set of problem landmarks active at this moment
+      // by checking which ranges contain the current (downscaled) time.
+      const problemSet = new Set<string>();
+      for (const range of problemRanges) {
+        if (lookupTime >= range.start && lookupTime <= range.end) {
+          for (const lm of range.landmarks) {
+            problemSet.add(lm);
+          }
+        }
+      }
+      const RED = "0 85% 55%";
+
       const frame = findClosestFrame(frames, lookupTime);
       if (!frame) {
         rafRef.current = requestAnimationFrame(draw);
@@ -111,9 +126,12 @@ export default function SkeletonOverlay({
 
       const lmMap = new Map(frame.landmarks.map((lm) => [lm.name, lm]));
 
+      // Helper: is this connection (edge) part of a problem area?
+      const isEdgeProblem = (a: string, b: string) =>
+        problemSet.has(a) && problemSet.has(b);
+
       // ── Pass 1: Dark outline for contrast against any background ──
       ctx.save();
-      ctx.strokeStyle = "rgba(0, 0, 0, 0.7)";
       ctx.lineWidth = 8;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -121,6 +139,9 @@ export default function SkeletonOverlay({
         const la = lmMap.get(a);
         const lb = lmMap.get(b);
         if (la && lb) {
+          ctx.strokeStyle = isEdgeProblem(a, b)
+            ? "rgba(80, 0, 0, 0.8)"
+            : "rgba(0, 0, 0, 0.7)";
           ctx.beginPath();
           ctx.moveTo(la.x * w, la.y * h);
           ctx.lineTo(lb.x * w, lb.y * h);
@@ -131,9 +152,6 @@ export default function SkeletonOverlay({
 
       // ── Pass 2: Bright colored lines with glow ────────────────────
       ctx.save();
-      ctx.shadowColor = `hsl(${color} / 0.8)`;
-      ctx.shadowBlur = 14;
-      ctx.strokeStyle = `hsl(${color})`;
       ctx.lineWidth = 4;
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
@@ -141,6 +159,11 @@ export default function SkeletonOverlay({
         const la = lmMap.get(a);
         const lb = lmMap.get(b);
         if (la && lb) {
+          const isProblem = isEdgeProblem(a, b);
+          const edgeColor = isProblem ? RED : color;
+          ctx.shadowColor = `hsl(${edgeColor} / 0.8)`;
+          ctx.shadowBlur = isProblem ? 20 : 14;
+          ctx.strokeStyle = `hsl(${edgeColor})`;
           ctx.beginPath();
           ctx.moveTo(la.x * w, la.y * h);
           ctx.lineTo(lb.x * w, lb.y * h);
@@ -151,29 +174,34 @@ export default function SkeletonOverlay({
 
       // ── Pass 3: Joint dots ────────────────────────────────────────
       ctx.save();
-      ctx.shadowColor = `hsl(${color} / 0.8)`;
-      ctx.shadowBlur = 10;
       for (const [name, lm] of lmMap) {
         const isKey = KEY_JOINTS.has(name);
-        const radius = isKey ? 7 : 4;
+        const isProblem = problemSet.has(name);
+        const jointColor = isProblem ? RED : color;
+        const radius = isProblem ? 9 : isKey ? 7 : 4;
+
+        ctx.shadowColor = `hsl(${jointColor} / 0.8)`;
+        ctx.shadowBlur = isProblem ? 22 : 10;
 
         // Dark outline ring
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        ctx.fillStyle = isProblem ? "rgba(80, 0, 0, 0.7)" : "rgba(0, 0, 0, 0.6)";
         ctx.beginPath();
         ctx.arc(lm.x * w, lm.y * h, radius + 2, 0, Math.PI * 2);
         ctx.fill();
 
         // Bright fill
-        ctx.fillStyle = `hsl(${color})`;
+        ctx.fillStyle = `hsl(${jointColor})`;
         ctx.beginPath();
         ctx.arc(lm.x * w, lm.y * h, radius, 0, Math.PI * 2);
         ctx.fill();
 
-        // White center highlight on key joints
-        if (isKey) {
-          ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+        // White center highlight on key joints / problem joints
+        if (isKey || isProblem) {
+          ctx.fillStyle = isProblem
+            ? "rgba(255, 255, 255, 0.8)"
+            : "rgba(255, 255, 255, 0.6)";
           ctx.beginPath();
-          ctx.arc(lm.x * w, lm.y * h, 3, 0, Math.PI * 2);
+          ctx.arc(lm.x * w, lm.y * h, isProblem ? 4 : 3, 0, Math.PI * 2);
           ctx.fill();
         }
       }
@@ -187,7 +215,7 @@ export default function SkeletonOverlay({
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [frames, color, videoRef]);
+  }, [frames, color, videoRef, problemRanges]);
 
   return (
     <canvas

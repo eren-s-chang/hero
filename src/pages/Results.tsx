@@ -545,7 +545,11 @@ export default function Results() {
                 className="w-full max-h-[500px] object-contain"
               />
               {frames.length > 0 && (
-                <SkeletonOverlay videoRef={videoRef} frames={frames} />
+                <SkeletonOverlay
+                  videoRef={videoRef}
+                  frames={frames}
+                  problemRanges={result.problem_landmark_ranges}
+                />
               )}
             </div>
 

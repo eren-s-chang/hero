@@ -19,6 +19,7 @@ import logging
 import math
 import os
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -70,46 +71,49 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 
 SYSTEM_PROMPT = (
-   "You are an elite Fitness Coach and Biomechanics Analyst. "
+   "You are an elite Biomechanical Signal Processing Expert and Strength Coach. "
 "You will receive a time-series of computed joint angles (in degrees) "
-"sampled from a workout video. Each line is one sampled frame with "
-"the timestamp and joint angles.\n\n"
+"sampled from a workout video. Each line is one sampled frame.\n\n"
 
-"PHASE 1: CLASSIFICATION & FILTERING\n"
-"Determine if the video depicts a common gym/fitness exercise with "
-"clearly observable reps (full cycles of movement). Sports activities do NOT count "
-"as common fitness exercises. Reject if the motion is a sport (e.g., basketball, "
-"soccer, tennis, running, cycling, swimming, martial arts), dancing, "
-"or if there is no clear rep-based movement you can count from the joint angles.\n\n"
+"PHASE 1: SIGNAL CLEANING & SEGMENTATION\n"
+"1. Scan the time-series to identify the 'Active Work Set'. Ignore the first and last 10-15% of frames "
+"if they represent setup (walking to position) or teardown (racking weights). Only analyze the periodic signal in the middle.\n"
+"2. Identify local minima and maxima in the joint angles to count reps. A valid rep MUST have a distinct Eccentric (lowering) "
+"and Concentric (lifting) phase. If the signal is chaotic or non-periodic, set 'analysis_allowed' to false.\n\n"
 
-"PHASE 2: BIOMECHANICAL ANALYSIS (The 'Rubric')\n"
-"If an exercise is detected (e.g., Squat, Bicep Curl, Lateral Raise):\n"
-"1. Internally establish the 'Optimal Biomechanical Model' for that specific exercise. "
-"Define the specific target joint angles for the start, concentric peak, and eccentric return "
-"(e.g., for a Squat: Hip Flexion > 90deg, neutral spine angle; for a Curl: Elbow Flexion peak > 130deg).\n"
-"2. Analyze the user's data against this rigid rubric. Do not arbitrarily guess the rating.\n"
-"3. Calculate the form_rating_1_to_10 based on the magnitude of deviation from these optimal angles. "
-"   - 10: Angles match the optimal model within a 5% margin of error.\n"
-"   - 8-9: Minor deviations in non-critical joints.\n"
-"   - 5-7: Major deviation in Range of Motion (ROM) or stability.\n"
-"   - 1-4: Dangerous mechanical deviations or complete failure to hit target angles.\n\n"
+"PHASE 2: KINEMATIC FINGERPRINTING (The 'What')\n"
+"Classify the exercise by analyzing 'Joint Coupling' (how joints move relative to each other):\n"
+"   - SQUAT PATTERN: Knee Flexion and Hip Flexion are COUPLED (move in-phase together). High ROM for both.\n"
+"   - HINGE/DEADLIFT PATTERN: Hip Flexion is DOMINANT. Knee Flexion is subordinate (<40% of Hip ROM).\n"
+"   - LUNGE PATTERN: Asymmetrical Hip/Knee angles (if split data provided) or similar to squat but with stability noise.\n"
+"   - PRESS PATTERN: Elbow Extension coupled with Shoulder Flexion/Abduction.\n"
+"   - PULL PATTERN: Elbow Flexion coupled with Shoulder Extension/Adduction.\n"
+"   - ISOLATION: One joint has High ROM (Primary Mover), adjacent joints are STATIC (Stabilizers).\n"
+"Reject analysis if the motion matches a Sport (tennis, running), Cardio, or Dance.\n\n"
 
-"PHASE 3: OUTPUT\n"
+"PHASE 3: BIOMECHANICAL SCORING (The 'How')\n"
+"If an exercise is detected, compare the user's angles to the 'Bio-Mechanical Ideal' for that SPECIFIC movement.\n"
+"Score strictly using this Hierarchy of Errors:\n"
+"1. CRITICAL FAULT (Max Score: 3/10): Safety violation. (e.g., Lumbar spine flexion in a Deadlift, Knee valgus in a Squat).\n"
+"2. MAJOR FAULT (Max Score: 6/10): Range of Motion failure. (e.g., Squat depth < 90deg knee flexion, half-reps).\n"
+"3. MINOR FAULT (Max Score: 8/10): Efficiency leaks. (e.g., Elbow drift in a Curl, looking up/down excessively).\n"
+"4. OPTIMAL (Score: 9-10/10): Angles align with the Ideal Model within 5% variance.\n\n"
+
+"PHASE 4: OUTPUT GENERATION\n"
 "Analyze the data and output **strictly valid JSON** with:\n"
-"  • analysis_allowed  (boolean – true only if this is a common gym/fitness exercise "
-"with clear, countable reps)\n"
-"  • rejection_reason  (string – if analysis_allowed is false, explain briefly why; "
-"otherwise return an empty string)\n"
+"  • analysis_allowed  (boolean – true only if a periodic gym exercise is found)\n"
+"  • rejection_reason  (string – if false, explain why based on signal noise or sport detection)\n"
 "  • exercise_detected  (string)\n"
-"  • rep_count  (integer – total reps detected, 0 if not a rep-based exercise)\n"
-"  • form_rating_1_to_10  (integer 1-10 – global average across the whole set, calculated via angle deviations)\n"
-"  • main_mistakes  (list of strings – most common form errors derived from specific angle failures)\n"
-"  • rep_analyses  (list of objects, one per rep, each with rep_number, "
-"timestamp_start, timestamp_end, rating_1_to_10, and mistakes)\n"
-"  • actionable_correction  (string – single most impactful cue to fix the specific angle deviation)\n"
+"  • rep_count  (integer – derived from the count of concentric/eccentric peaks)\n"
+"  • form_rating_1_to_10  (integer – global average based on the Hierarchy of Errors above)\n"
+"  • main_mistakes  (list of strings – specific deviations from the Optimal Angles)\n"
+"  • rep_analyses  (list of objects, one per rep, containing rep_number, timestamp_start, timestamp_end, rating_1_to_10, mistakes, "
+"and problem_joints – a list of 0-3 angle column names that have the WORST deviations IN THAT SPECIFIC REP. "
+"Use the EXACT column names from the input like 'L_knee', 'R_hip', 'spine', etc. Only include joints with Critical or Major faults for that rep.)\n"
+"  • problem_joints  (list of strings – the GLOBAL union of all per-rep problem_joints, ordered from most problematic to least. 1-3 joints maximum.)\n"
+"  • actionable_correction  (string – the single most impactful fix for the Critical or Major faults)\n"
 "If analysis_allowed is false, set exercise_detected to 'unrecognized', rep_count to 0, "
-"form_rating_1_to_10 to 0, main_mistakes to [], rep_analyses to [], and provide a short "
-"actionable_correction about uploading a clear rep-based gym exercise.\n"
+"form_rating_1_to_10 to 0, main_mistakes to [], rep_analyses to [], and provide a short correction.\n"
 "Do NOT wrap the JSON in markdown code-fences. Return raw JSON only."
 )
 
@@ -138,9 +142,17 @@ RESPONSE_JSON_SCHEMA = {
                         "type": "array",
                         "items": {"type": "string"},
                     },
+                    "problem_joints": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
                 },
-                "required": ["rep_number", "timestamp_start", "timestamp_end", "rating_1_to_10", "mistakes"],
+                "required": ["rep_number", "timestamp_start", "timestamp_end", "rating_1_to_10", "mistakes", "problem_joints"],
             },
+        },
+        "problem_joints": {
+            "type": "array",
+            "items": {"type": "string"},
         },
         "actionable_correction": {"type": "string"},
     },
@@ -152,6 +164,7 @@ RESPONSE_JSON_SCHEMA = {
         "form_rating_1_to_10",
         "main_mistakes",
         "rep_analyses",
+        "problem_joints",
         "actionable_correction",
     ],
 }
@@ -162,7 +175,7 @@ RESPONSE_JSON_SCHEMA = {
 PoseLandmark = mp.solutions.pose.PoseLandmark
 LANDMARK_NAMES = [lm.name for lm in PoseLandmark]
 
-TARGET_SAMPLES_PER_SEC = 3  # ~3 snapshots per second of video
+TARGET_SAMPLES_PER_SEC = 10  # ~10 snapshots per second of video
 
 # Joint-angle definitions: (point_a, vertex, point_b)
 # The angle is measured at the *vertex* joint.
@@ -179,6 +192,12 @@ ANGLE_DEFS: dict[str, tuple[PoseLandmark, PoseLandmark, PoseLandmark]] = {
     "R_ankle":     (PoseLandmark.RIGHT_KNEE,      PoseLandmark.RIGHT_ANKLE,    PoseLandmark.RIGHT_FOOT_INDEX),
     "spine":       (PoseLandmark.LEFT_SHOULDER,    PoseLandmark.LEFT_HIP,       PoseLandmark.LEFT_KNEE),
     # ↑ spine forward lean approximated via shoulder-hip-knee on the left side
+}
+
+# Map angle names → landmark names involved (used by frontend to highlight in red)
+ANGLE_TO_LANDMARKS: dict[str, list[str]] = {
+    name: [PoseLandmark(a).name, PoseLandmark(v).name, PoseLandmark(b).name]
+    for name, (a, v, b) in ANGLE_DEFS.items()
 }
 
 
@@ -235,7 +254,7 @@ def _process_video(
 
     pose = mp.solutions.pose.Pose(
         static_image_mode=False,
-        model_complexity=0,
+        model_complexity=2,
         min_detection_confidence=0.5,
         min_tracking_confidence=0.5,
     )
@@ -365,6 +384,34 @@ def _interpret_with_gemini(angle_text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Format conversion
+# ---------------------------------------------------------------------------
+def _ensure_mp4(video_path: Path) -> Path:
+    """Convert non-MP4 videos (especially WebM) to MP4 for reliable OpenCV decoding."""
+    if video_path.suffix.lower() in (".mp4", ".m4v"):
+        return video_path
+
+    mp4_path = video_path.with_suffix(".mp4")
+    logger.info("Converting %s → %s via ffmpeg", video_path.name, mp4_path.name)
+    result = subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", str(video_path),
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+            "-an", str(mp4_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        logger.error("ffmpeg conversion failed: %s", result.stderr[-500:])
+        raise RuntimeError(f"ffmpeg conversion failed (exit {result.returncode})")
+
+    logger.info("Converted to MP4: %.1f MB", mp4_path.stat().st_size / 1e6)
+    return mp4_path
+
+
+# ---------------------------------------------------------------------------
 # Celery task
 # ---------------------------------------------------------------------------
 @celery_app.task(name="analyze_video", bind=True, max_retries=2)
@@ -373,14 +420,18 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
     # Write base64 video to a temp file so OpenCV can read it
     tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
     tmp_path = Path(tmp.name)
+    mp4_path: Path | None = None
     try:
         tmp.write(base64.b64decode(video_b64))
         tmp.close()
         logger.info("Wrote %.1f MB to %s", tmp_path.stat().st_size / 1e6, tmp_path.name)
 
+        # Convert WebM/other formats to MP4 for reliable OpenCV decoding
+        mp4_path = _ensure_mp4(tmp_path)
+
         # Step A – extract joint angles + raw landmarks
-        logger.info("Step A: processing video %s", tmp_path.name)
-        angle_text, raw_frames = _process_video(str(tmp_path))
+        logger.info("Step A: processing video %s", mp4_path.name)
+        angle_text, raw_frames = _process_video(str(mp4_path))
 
         # Step B – buffer raw landmarks in Redis for frontend overlay
         task_id = self.request.id
@@ -399,6 +450,39 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
         logger.info("Step C: sending %d chars of angle data to Gemini", len(angle_text))
         analysis = _interpret_with_gemini(angle_text)
 
+        # Step D – resolve per-rep problem_joints to landmark ranges for frontend
+        problem_landmark_ranges: list[dict] = []
+        global_landmarks_seen: set[str] = set()
+        global_problem_landmarks: list[str] = []
+
+        for rep in analysis.get("rep_analyses", []):
+            rep_joints = rep.get("problem_joints", [])
+            if not rep_joints:
+                continue
+            rep_landmarks: list[str] = []
+            seen: set[str] = set()
+            for joint_name in rep_joints:
+                for lm_name in ANGLE_TO_LANDMARKS.get(joint_name, []):
+                    if lm_name not in seen:
+                        rep_landmarks.append(lm_name)
+                        seen.add(lm_name)
+                    if lm_name not in global_landmarks_seen:
+                        global_problem_landmarks.append(lm_name)
+                        global_landmarks_seen.add(lm_name)
+            if rep_landmarks:
+                problem_landmark_ranges.append({
+                    "start": rep.get("timestamp_start", 0),
+                    "end": rep.get("timestamp_end", 0),
+                    "landmarks": rep_landmarks,
+                })
+
+        analysis["problem_landmark_ranges"] = problem_landmark_ranges
+        analysis["problem_landmarks"] = global_problem_landmarks
+        logger.info(
+            "Problem landmark ranges: %d ranges, global landmarks: %s",
+            len(problem_landmark_ranges), global_problem_landmarks,
+        )
+
         return analysis
 
     except Exception as exc:
@@ -407,4 +491,6 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
 
     finally:
         tmp_path.unlink(missing_ok=True)
-        logger.info("Cleaned up %s", tmp_path.name)
+        if mp4_path and mp4_path != tmp_path:
+            mp4_path.unlink(missing_ok=True)
+        logger.info("Cleaned up temp files")
