@@ -26,6 +26,7 @@ import {
 import { fetchCorrectionAudio } from "@/lib/api";
 import SkeletonOverlay from "@/components/SkeletonOverlay";
 import SaitamaFace from "@/assets/saitama face.png";
+import ThinkingBubble from "@/assets/thinking-bubble.png";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -528,18 +529,31 @@ export default function Results() {
         />
       )}
 
-      {/* Animated Saitama face: pops up when correction audio plays */}
+      {/* Animated Saitama face with thinking bubble: pops up when correction audio plays */}
       <AnimatePresence>
         {audioPlaying && (
-          <motion.img
-            src={SaitamaFace}
-            alt="Saitama face"
+          <motion.div
             initial={{ opacity: 0, y: 40, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 40, scale: 0.9 }}
             transition={{ duration: 0.45, ease: "easeOut" }}
-            className="fixed bottom-6 right-6 w-32 h-32 z-50 pointer-events-none drop-shadow-2xl"
-          />
+            className="fixed bottom-6 right-6 z-50 pointer-events-none"
+          >
+            {/* Thinking bubble positioned top-left of face */}
+            <motion.img
+              src={ThinkingBubble}
+              alt="Thinking bubble"
+              className="absolute -top-20 -left-24 w-28 h-24"
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.3 }}
+            />
+            <img
+              src={SaitamaFace}
+              alt="Saitama face"
+              className="w-32 h-32 drop-shadow-2xl"
+            />
+          </motion.div>
         )}
       </AnimatePresence>
       {/* Particles */}
