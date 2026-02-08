@@ -21,6 +21,7 @@ import {
   type AnalysisResult,
   type RepAnalysis,
   type LandmarkFrame,
+  type Mistake,
 } from "@/lib/api";
 import SkeletonOverlay from "@/components/SkeletonOverlay";
 
@@ -796,13 +797,47 @@ function ActiveRepDetail({ rep }: { rep: RepAnalysis }) {
       ) : (
         <ul className="space-y-2">
           {rep.mistakes.map((m, i) => (
-            <li key={i} className="flex items-start gap-2 font-modern">
-              <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
-              {m}
-            </li>
+            <MistakeItem key={i} mistake={m} />
           ))}
         </ul>
       )}
     </motion.div>
+  );
+}
+
+function MistakeItem({ mistake }: { mistake: string | Mistake }) {
+  if (typeof mistake === "string") {
+    return (
+      <li className="flex items-start gap-2 font-modern">
+        <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+        <span>{mistake}</span>
+      </li>
+    );
+  }
+
+  const { fault, visual_evidence, angle_evidence, confidence, deduction } = mistake;
+  const details: string[] = [];
+  if (visual_evidence) details.push(`Visual: ${visual_evidence}`);
+  if (angle_evidence) details.push(`Angles: ${angle_evidence}`);
+
+  const meta: string[] = [];
+  if (typeof confidence === "number") meta.push(`Confidence ${(confidence * 100).toFixed(0)}%`);
+  if (typeof deduction === "number") meta.push(`Deduction -${deduction.toFixed(1)}`);
+
+  return (
+    <li className="flex items-start gap-2 font-modern">
+      <AlertTriangle className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" />
+      <div className="space-y-1">
+        <p className="font-semibold text-foreground">
+          {fault || "Form issue"}
+        </p>
+        {details.length > 0 && (
+          <p className="text-xs text-muted-foreground leading-relaxed">{details.join(" · ")}</p>
+        )}
+        {meta.length > 0 && (
+          <p className="text-[11px] text-muted-foreground/80">{meta.join(" · ")}</p>
+        )}
+      </div>
+    </li>
   );
 }

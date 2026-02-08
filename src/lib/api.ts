@@ -12,12 +12,20 @@ export interface AnalyzeResponse {
   detail: string;
 }
 
+export interface Mistake {
+  fault?: string;
+  confidence?: number;
+  visual_evidence?: string;
+  angle_evidence?: string;
+  deduction?: number;
+}
+
 export interface RepAnalysis {
   rep_number: number;
   timestamp_start: number;
   timestamp_end: number;
   rating_1_to_10: number;
-  mistakes: string[];
+  mistakes: Array<string | Mistake>;
   problem_joints?: string[];
 }
 
