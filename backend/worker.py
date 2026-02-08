@@ -885,6 +885,37 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
         analysis["rep_frame_timestamps"] = rep_frame_timestamps
 
         # Buffer per-rep frames with landmarks in Redis for frontend display
+        # Recalculate per-rep and overall scores from LLM deductions to keep scoring deterministic
+        reps = analysis.get("rep_analyses", []) or []
+        if isinstance(reps, list) and reps:
+            for rep in reps:
+                if not isinstance(rep, dict):
+                    continue
+                mistakes = rep.get("mistakes", []) or []
+                total_deduction = 0.0
+                for m in mistakes:
+                    if not isinstance(m, dict):
+                        continue
+                    conf = m.get("confidence")
+                    # Apply deduction only when confidence is missing or >= 0.75
+                    if conf is not None and conf < 0.75:
+                        continue
+                    try:
+                        ded = float(m.get("deduction", 0) or 0)
+                    except (TypeError, ValueError):
+                        ded = 0.0
+                    if ded > 0:
+                        total_deduction += ded
+
+                rating = max(1, min(10, int(round(10 - total_deduction))))
+                rep["rating_1_to_10"] = rating
+
+            # Overall form rating = average of per-rep ratings
+            ratings = [r.get("rating_1_to_10", 0) for r in reps if isinstance(r, dict)]
+            if ratings:
+                avg_rating = sum(ratings) / len(ratings)
+                analysis["form_rating_1_to_10"] = max(1, min(10, int(round(avg_rating))))
+                analysis["rep_count"] = len(ratings)
         if task_id and rep_frames_with_landmarks:
             try:
                 rep_payload = []
