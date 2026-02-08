@@ -367,19 +367,24 @@ export default function Results() {
 
   const analysisAllowed = result.analysis_allowed !== false;
   const rejectionReason = (result.rejection_reason || "").trim();
-
-  const overlayProblemRanges =
-    result.problem_landmark_ranges && result.problem_landmark_ranges.length > 0
-      ? result.problem_landmark_ranges
-      : result.problem_landmarks && result.problem_landmarks.length > 0 && frames.length > 0
-        ? [
-            {
-              start: 0,
-              end: frames[frames.length - 1].time_s,
-              landmarks: result.problem_landmarks,
-            },
-          ]
-        : undefined;
+  // Build per-rep problem ranges so red highlights only appear while
+  // the video is inside each rep's time window.
+  const overlayProblemRanges = (() => {
+    if (result.problem_landmark_ranges && result.problem_landmark_ranges.length > 0) {
+      return result.problem_landmark_ranges;
+    }
+    // Fallback: derive per-rep ranges from rep_analyses + global problem_landmarks
+    if (result.problem_landmarks && result.problem_landmarks.length > 0 && result.rep_analyses.length > 0) {
+      return result.rep_analyses
+        .filter((r) => r.problem_joints && r.problem_joints.length > 0)
+        .map((r) => ({
+          start: r.timestamp_start,
+          end: r.timestamp_end,
+          landmarks: result.problem_landmarks!,
+        }));
+    }
+    return undefined;
+  })();
 
   if (!analysisAllowed) {
     return (
