@@ -529,33 +529,6 @@ export default function Results() {
         />
       )}
 
-      {/* Animated Saitama face with thinking bubble: pops up when correction audio plays */}
-      <AnimatePresence>
-        {audioPlaying && (
-          <motion.div
-            initial={{ opacity: 0, y: 40, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 40, scale: 0.9 }}
-            transition={{ duration: 0.45, ease: "easeOut" }}
-            className="fixed bottom-6 right-6 z-50 pointer-events-none"
-          >
-            {/* Thinking bubble positioned top-left of face */}
-            <motion.img
-              src={ThinkingBubble}
-              alt="Thinking bubble"
-              className="absolute -top-20 -left-24 w-28 h-24"
-              initial={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.3, delay: 0.3 }}
-            />
-            <img
-              src={SaitamaFace}
-              alt="Saitama face"
-              className="w-32 h-32 drop-shadow-2xl"
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
       {/* Particles */}
       <div className="absolute inset-0 pointer-events-none">
         {[...Array(6)].map((_, i) => (
@@ -599,19 +572,40 @@ export default function Results() {
           </div>
         </motion.div>
 
-        {/* ── Actionable correction ─────────────────────────────────────────────── */}
+        {/* ── Saitama Coach with Thinking Bubble ─────────────────────────────────── */}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="bg-secondary/10 border-2 border-secondary rounded-md p-5 mb-8 flex gap-4 items-start"
+          className="bg-card border-4 border-border rounded-md p-6 mb-8 flex items-start gap-6"
         >
-          <Zap className="w-6 h-6 text-secondary flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-heading text-xl tracking-wider text-secondary mb-1">
-              TOP CORRECTION
+          {/* Saitama face with thinking bubble */}
+          <div className="relative flex-shrink-0">
+            <motion.img
+              src={ThinkingBubble}
+              alt="Thinking bubble"
+              className="absolute -top-8 -left-4 w-24 h-20 z-10"
+              initial={{ opacity: 0, scale: 0.5, rotate: -10 }}
+              animate={{ opacity: 1, scale: 1, rotate: 0 }}
+              transition={{ duration: 0.4, delay: 0.3, ease: "easeOut" }}
+            />
+            <motion.img
+              src={SaitamaFace}
+              alt="Saitama Coach"
+              className="w-24 h-24 drop-shadow-2xl"
+              initial={{ scale: 0.8 }}
+              animate={{ scale: 1 }}
+              transition={{ duration: 0.3, delay: 0.2 }}
+            />
+          </div>
+          
+          {/* Correction text */}
+          <div className="flex-1 pt-2">
+            <p className="font-heading text-xl tracking-wider text-primary mb-2 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-primary" />
+              COACH'S TIP
             </p>
-            <p className="font-modern text-foreground/90 leading-relaxed">
+            <p className="font-modern text-foreground/90 leading-relaxed text-lg">
               {result.actionable_correction}
             </p>
           </div>
