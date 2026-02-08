@@ -198,4 +198,29 @@ async def rep_frame(task_id: str, index: int):
         content=base64.b64decode(frame_data["b64"]),
         media_type="image/jpeg",
         headers={"Cache-Control": "public, max-age=3600"},
+
+
+    @app.get("/correction-audio/{task_id}")
+    async def correction_audio(task_id: str):
+        """Return the synthesized correction audio as MP3.
+    
+        The audio is stored in Redis as base64-encoded data during analysis.
+        Returns {\"audio_url\": \"data:audio/mpeg;base64,...\", \"text\": \"...\"}."""
+        redis_key = f"correction_audio:{task_id}"
+        data = _redis.get(redis_key)
+
+        if data is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Correction audio not found. It may have expired or the task hasn't completed yet.",
+            )
+
+        payload = json.loads(data)
+        audio_b64 = payload.get("audio", "")
+        correction_text = payload.get("text", "")
+
+        return {
+            "audio_url": f"data:audio/mpeg;base64,{audio_b64}",
+            "text": correction_text,
+        }
     )
