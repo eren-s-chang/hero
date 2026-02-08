@@ -19,6 +19,7 @@ import logging
 import math
 import os
 import re
+import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -365,6 +366,34 @@ def _interpret_with_gemini(angle_text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Format conversion
+# ---------------------------------------------------------------------------
+def _ensure_mp4(video_path: Path) -> Path:
+    """Convert non-MP4 videos (especially WebM) to MP4 for reliable OpenCV decoding."""
+    if video_path.suffix.lower() in (".mp4", ".m4v"):
+        return video_path
+
+    mp4_path = video_path.with_suffix(".mp4")
+    logger.info("Converting %s → %s via ffmpeg", video_path.name, mp4_path.name)
+    result = subprocess.run(
+        [
+            "ffmpeg", "-y", "-i", str(video_path),
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+            "-an", str(mp4_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if result.returncode != 0:
+        logger.error("ffmpeg conversion failed: %s", result.stderr[-500:])
+        raise RuntimeError(f"ffmpeg conversion failed (exit {result.returncode})")
+
+    logger.info("Converted to MP4: %.1f MB", mp4_path.stat().st_size / 1e6)
+    return mp4_path
+
+
+# ---------------------------------------------------------------------------
 # Celery task
 # ---------------------------------------------------------------------------
 @celery_app.task(name="analyze_video", bind=True, max_retries=2)
@@ -373,14 +402,18 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
     # Write base64 video to a temp file so OpenCV can read it
     tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
     tmp_path = Path(tmp.name)
+    mp4_path: Path | None = None
     try:
         tmp.write(base64.b64decode(video_b64))
         tmp.close()
         logger.info("Wrote %.1f MB to %s", tmp_path.stat().st_size / 1e6, tmp_path.name)
 
+        # Convert WebM/other formats to MP4 for reliable OpenCV decoding
+        mp4_path = _ensure_mp4(tmp_path)
+
         # Step A – extract joint angles + raw landmarks
-        logger.info("Step A: processing video %s", tmp_path.name)
-        angle_text, raw_frames = _process_video(str(tmp_path))
+        logger.info("Step A: processing video %s", mp4_path.name)
+        angle_text, raw_frames = _process_video(str(mp4_path))
 
         # Step B – buffer raw landmarks in Redis for frontend overlay
         task_id = self.request.id
@@ -407,4 +440,6 @@ def analyze_video(self, video_b64: str, ext: str = ".mp4") -> dict[str, Any]:
 
     finally:
         tmp_path.unlink(missing_ok=True)
-        logger.info("Cleaned up %s", tmp_path.name)
+        if mp4_path and mp4_path != tmp_path:
+            mp4_path.unlink(missing_ok=True)
+        logger.info("Cleaned up temp files")
